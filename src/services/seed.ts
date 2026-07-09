@@ -16,7 +16,7 @@ export const seedCategories: Category[] = [
   { id: "cat_travel",   name: "Travel",     color: "#3DA08A", icon: "Plane" },
   { id: "cat_content",  name: "Content",    color: "#C0455E", icon: "PenLine" },
   { id: "cat_home",     name: "Home",       color: "#7091E6", icon: "Home" },
-].map((c, i) => ({ ...c, sortIndex: i }));
+].map((c, i) => ({ ...c, sortIndex: i, year: new Date().getFullYear() }));
 
 export const seedGoals: Goal[] = [
   { id: "goal_aws", name: "Pass AWS Certification", description: "Earn the Solutions Architect Associate credential.", categoryId: "cat_career", targetDate: daysAhead(42),
@@ -49,7 +49,7 @@ export const seedGoals: Goal[] = [
       { id: "m14", title: "Down payment saved", done: false },
       { id: "m15", title: "Pre-approval letter", done: false },
     ] },
-].map((g, i) => ({ ...g, sortIndex: i, milestones: g.milestones.map((m) => ({ ...m, taskId: null })) }));
+].map((g, i) => ({ ...g, sortIndex: i, year: new Date().getFullYear(), milestones: g.milestones.map((m) => ({ ...m, taskId: null })) }));
 
 export const seedProjects: Project[] = [
   { id: "proj_aws",  name: "AWS Certification",   description: "Study plan, practice exams, booking.", categoryId: "cat_career", goalId: "goal_aws",  targetDate: daysAhead(40) },
@@ -57,7 +57,7 @@ export const seedProjects: Project[] = [
   { id: "proj_site", name: "ServeCyber Website",  description: "Design, build, launch.",               categoryId: "cat_cyber",  goalId: "goal_sc",   targetDate: daysAhead(30) },
   { id: "proj_apt",  name: "Apartment Search",    description: "Shortlist, tour, apply.",              categoryId: "cat_home",   goalId: "goal_home", targetDate: daysAhead(60) },
   { id: "proj_conf", name: "Conference Planning", description: "Talk proposal, travel, logistics.",    categoryId: "cat_travel", goalId: null,        targetDate: daysAhead(50) },
-].map((p, i) => ({ ...p, sortIndex: i }));
+].map((p, i) => ({ ...p, sortIndex: i, year: new Date().getFullYear() }));
 
 function t(over: Partial<Task>): Task {
   return {
@@ -65,6 +65,7 @@ function t(over: Partial<Task>): Task {
     difficulty: "Medium", categoryId: "cat_personal", projectId: null, goalId: null,
     deadline: null, deadlineTime: null, startDate: null, duration: 60, recurring: "None", tags: [],
     status: "Not Started", subtasks: [], createdAt: daysAgo(10), completedAt: null,
+    year: new Date().getFullYear(),
     ...over,
   };
 }

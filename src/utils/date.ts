@@ -29,6 +29,27 @@ export function formatTime(hhmm: string): string {
   return `${hh}:${pad(m)} ${ampm}`;
 }
 
+/* ── Yearly archive filtering ─────────────────────────────────────────
+   "current" = the smart default: this year's items, plus anything from a
+   prior year that isn't finished yet, so archiving never hides open work.
+   "all" = everything. A specific year = a literal, unfiltered snapshot of
+   that year, complete or not. */
+export type YearFilter = "current" | "all" | number;
+
+export function matchesYearFilter(itemYear: number, isComplete: boolean, filter: YearFilter, activeYear: number): boolean {
+  if (filter === "all") return true;
+  if (filter === "current") return itemYear === activeYear || !isComplete;
+  return itemYear === filter;
+}
+
+/** Distinct years present in a list, always including activeYear (so "this
+ *  year" is selectable even before anything's been created in it), newest first. */
+export function yearOptions(items: { year: number }[], activeYear: number): number[] {
+  const set = new Set(items.map((i) => i.year));
+  set.add(activeYear);
+  return [...set].sort((a, b) => b - a);
+}
+
 export function relativeDeadline(deadline: string | null): { label: string; tone: "over" | "today" | "soon" | "later" } | null {
   if (!deadline) return null;
   const t = todayISO();

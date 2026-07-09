@@ -145,7 +145,7 @@ export function ProjectsPage({ app }: { app: AppData }) {
 }
 
 function blankProject(): Project {
-  return { id: uid("proj"), name: "", description: "", categoryId: null, goalId: null, targetDate: daysAhead(30), sortIndex: 0 };
+  return { id: uid("proj"), name: "", description: "", categoryId: null, goalId: null, targetDate: daysAhead(30), sortIndex: 0, year: new Date().getFullYear() };
 }
 
 export function ProjectModal({ app }: { app: AppData }) {
@@ -318,7 +318,7 @@ export function GoalsPage({ app }: { app: AppData }) {
 }
 
 function blankGoal(): Goal {
-  return { id: uid("goal"), name: "", description: "", categoryId: null, targetDate: daysAhead(90), milestones: [], sortIndex: 0 };
+  return { id: uid("goal"), name: "", description: "", categoryId: null, targetDate: daysAhead(90), milestones: [], sortIndex: 0, year: new Date().getFullYear() };
 }
 
 /** Sensible defaults for a task spun off from a milestone — inherits the goal's
@@ -344,6 +344,7 @@ function taskFromMilestone(goal: Goal, title: string, projectId: string | null):
     subtasks: [],
     createdAt: todayISO(),
     completedAt: null,
+    year: new Date().getFullYear(),
   };
 }
 
@@ -642,7 +643,7 @@ export function CategoriesPage({ app }: { app: AppData }) {
 }
 
 function blankCategory(): Category {
-  return { id: uid("cat"), name: "", color: SWATCHES[0], icon: "Tag", sortIndex: 0 };
+  return { id: uid("cat"), name: "", color: SWATCHES[0], icon: "Tag", sortIndex: 0, year: new Date().getFullYear() };
 }
 
 export function CategoryModal({ app }: { app: AppData }) {

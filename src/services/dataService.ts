@@ -27,6 +27,7 @@ const taskToRow = (t: Task, userId: string) => ({
   subtasks: t.subtasks,
   created_date: t.createdAt,
   completed_at: t.completedAt ? new Date(t.completedAt).toISOString() : null,
+  year: t.year,
 });
 
 const rowToTask = (r: any): Task => ({
@@ -49,6 +50,7 @@ const rowToTask = (r: any): Task => ({
   subtasks: r.subtasks ?? [],
   createdAt: r.created_date,
   completedAt: r.completed_at ? toLocalStamp(r.completed_at) : null,
+  year: r.year ?? new Date(r.created_date).getFullYear(),
 });
 
 /** timestamptz → local "YYYY-MM-DDTHH:mm:ss" (analytics use local day/hour) */
@@ -60,16 +62,17 @@ function toLocalStamp(ts: string): string {
 
 const projectToRow = (p: Project, userId: string) => ({
   id: p.id, user_id: userId, name: p.name, description: p.description,
-  category_id: p.categoryId, goal_id: p.goalId, target_date: p.targetDate, sort_index: p.sortIndex,
+  category_id: p.categoryId, goal_id: p.goalId, target_date: p.targetDate, sort_index: p.sortIndex, year: p.year,
 });
 const rowToProject = (r: any): Project => ({
   id: r.id, name: r.name, description: r.description ?? "",
   categoryId: r.category_id, goalId: r.goal_id, targetDate: r.target_date, sortIndex: r.sort_index ?? 0,
+  year: r.year ?? new Date().getFullYear(),
 });
 
 const goalToRow = (g: Goal, userId: string) => ({
   id: g.id, user_id: userId, name: g.name, description: g.description,
-  category_id: g.categoryId, target_date: g.targetDate, milestones: g.milestones, sort_index: g.sortIndex,
+  category_id: g.categoryId, target_date: g.targetDate, milestones: g.milestones, sort_index: g.sortIndex, year: g.year,
 });
 const rowToGoal = (r: any): Goal => ({
   id: r.id, name: r.name, description: r.description ?? "",
@@ -77,13 +80,15 @@ const rowToGoal = (r: any): Goal => ({
   // Legacy rows' milestone objects may not have a taskId key at all — normalize to null (unlinked).
   milestones: (r.milestones ?? []).map((m: any) => ({ ...m, taskId: m.taskId ?? null })),
   sortIndex: r.sort_index ?? 0,
+  year: r.year ?? new Date().getFullYear(),
 });
 
 const categoryToRow = (c: Category, userId: string) => ({
-  id: c.id, user_id: userId, name: c.name, color: c.color, icon: c.icon, sort_index: c.sortIndex,
+  id: c.id, user_id: userId, name: c.name, color: c.color, icon: c.icon, sort_index: c.sortIndex, year: c.year,
 });
 const rowToCategory = (r: any): Category => ({
   id: r.id, name: r.name, color: r.color, icon: r.icon, sortIndex: r.sort_index ?? 0,
+  year: r.year ?? new Date().getFullYear(),
 });
 
 const habitToRow = (h: Habit, userId: string) => ({
@@ -128,6 +133,7 @@ const habitCompletionToRow = (c: HabitCompletion, userId: string) => ({
   amount: c.amount,
   notes: c.notes,
   xp_earned: c.xpEarned,
+  year: c.year,
 });
 const rowToHabitCompletion = (r: any): HabitCompletion => ({
   id: r.id,
@@ -138,6 +144,7 @@ const rowToHabitCompletion = (r: any): HabitCompletion => ({
   notes: r.notes ?? "",
   xpEarned: r.xp_earned ?? 0,
   createdAt: r.created_at ? toLocalStamp(r.created_at) : nowStampFallback(),
+  year: r.year ?? new Date(r.date).getFullYear(),
 });
 
 function nowStampFallback(): string {

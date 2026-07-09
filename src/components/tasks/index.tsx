@@ -110,6 +110,7 @@ function blankTask(): Task {
     difficulty: "Medium", categoryId: null, projectId: null, goalId: null,
     deadline: null, deadlineTime: null, startDate: null, duration: 60, recurring: "None", tags: [],
     status: "Not Started", subtasks: [], createdAt: todayISO(), completedAt: null,
+    year: new Date().getFullYear(),
   };
 }
 

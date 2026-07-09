@@ -117,16 +117,34 @@ alter table public.goals      add column if not exists sort_index integer not nu
 alter table public.projects   add column if not exists sort_index integer not null default 0;
 alter table public.tasks      add column if not exists deadline_time text;
 
+-- ── Yearly archive ───────────────────────────────────────────────────
+-- Safe to leave here and re-run anytime — only adds the column if missing.
+-- The default only stamps NEW rows correctly (now() is volatile, so ADD COLUMN
+-- computes it once and applies that single value to all existing rows) — run
+-- the one-time backfill separately to derive each existing row's real year.
+-- habits itself is intentionally excluded: an active recurring habit isn't a
+-- year-scoped item the way a finished project is (see habit_completions instead).
+alter table public.categories        add column if not exists year integer not null default extract(year from now())::integer;
+alter table public.goals             add column if not exists year integer not null default extract(year from now())::integer;
+alter table public.projects          add column if not exists year integer not null default extract(year from now())::integer;
+alter table public.tasks             add column if not exists year integer not null default extract(year from now())::integer;
+alter table public.habit_completions add column if not exists year integer not null default extract(year from now())::integer;
+
 -- ── Indexes ─────────────────────────────────────────────────────────
 create index if not exists tasks_user_idx              on public.tasks (user_id);
 create index if not exists tasks_deadline_idx          on public.tasks (user_id, deadline);
 create index if not exists tasks_status_idx            on public.tasks (user_id, status);
+create index if not exists tasks_year_idx              on public.tasks (user_id, year);
 create index if not exists projects_user_idx           on public.projects (user_id);
+create index if not exists projects_year_idx           on public.projects (user_id, year);
 create index if not exists goals_user_idx              on public.goals (user_id);
+create index if not exists goals_year_idx              on public.goals (user_id, year);
 create index if not exists categories_user_idx         on public.categories (user_id);
+create index if not exists categories_year_idx         on public.categories (user_id, year);
 create index if not exists habits_user_idx             on public.habits (user_id);
 create index if not exists habit_completions_user_idx  on public.habit_completions (user_id);
 create index if not exists habit_completions_habit_idx on public.habit_completions (habit_id, date);
+create index if not exists habit_completions_year_idx  on public.habit_completions (user_id, year);
 
 -- ── Row Level Security: each user can only touch their own rows ────
 alter table public.categories        enable row level security;

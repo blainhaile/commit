@@ -32,6 +32,7 @@ export interface Task {
   subtasks: Subtask[];
   createdAt: string;         // YYYY-MM-DD
   completedAt: string | null; // YYYY-MM-DDTHH:mm:ss
+  year: number;              // calendar year created — drives the yearly archive filter
 }
 
 export interface Project {
@@ -42,6 +43,7 @@ export interface Project {
   goalId: string | null;
   targetDate: string | null;
   sortIndex: number;
+  year: number;
 }
 
 export interface Milestone {
@@ -59,6 +61,7 @@ export interface Goal {
   targetDate: string | null;
   milestones: Milestone[];
   sortIndex: number;
+  year: number;
 }
 
 export interface Category {
@@ -67,6 +70,7 @@ export interface Category {
   color: string;
   icon: string; // lucide icon name
   sortIndex: number;
+  year: number; // tracked for consistency; categories are perpetual, not filtered by it
 }
 
 export interface WidgetPrefs {
@@ -87,6 +91,8 @@ export interface Settings {
   displayName: string;
   widgets: WidgetPrefs;
   notifPrefs: NotifPrefs;
+  activeYear: number;              // the year pages default to showing
+  dismissedArchiveYear: number | null; // "Not now" was clicked for this target year — don't re-prompt until it changes
 }
 
 export interface LevelInfo {
@@ -138,4 +144,5 @@ export interface HabitCompletion {
   notes: string;
   xpEarned: number;
   createdAt: string;  // YYYY-MM-DDTHH:mm:ss
+  year: number;       // derived from `date`, not creation time — for future historical views
 }

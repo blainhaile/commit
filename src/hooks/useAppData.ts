@@ -23,6 +23,8 @@ const DEFAULT_SETTINGS: Settings = {
   displayName: "",
   widgets: { focus: true, deadlines: true, charts: true, recent: true },
   notifPrefs: { d1: true, h1: true, m15: false },
+  activeYear: new Date().getFullYear(),
+  dismissedArchiveYear: null,
 };
 
 export interface ProjectStat { name: string; total: number; done: number; pct: number; eta: string }
@@ -90,6 +92,20 @@ export function useAppData(user: User) {
   const setTheme = useCallback((theme: ThemeMode) => patchSettings({ theme }), [patchSettings]);
   const setWidgets = useCallback((widgets: WidgetPrefs) => patchSettings({ widgets }), [patchSettings]);
   const setNotifPrefs = useCallback((notifPrefs: NotifPrefs) => patchSettings({ notifPrefs }), [patchSettings]);
+
+  /* ---------- yearly archive ----------
+     Archiving never deletes anything — it just advances activeYear, which is what
+     every page's "This year" default filter compares against. */
+  const currentCalendarYear = new Date().getFullYear();
+  const needsArchivePrompt = currentCalendarYear > settings.activeYear && settings.dismissedArchiveYear !== currentCalendarYear;
+
+  const archiveYear = useCallback(() => {
+    patchSettings({ activeYear: currentCalendarYear, dismissedArchiveYear: null });
+  }, [patchSettings, currentCalendarYear]);
+
+  const dismissArchivePrompt = useCallback(() => {
+    patchSettings({ dismissedArchiveYear: currentCalendarYear });
+  }, [patchSettings, currentCalendarYear]);
 
   /* ---------- toasts & confetti ---------- */
   const pushToast = useCallback((toast: Omit<AppToast, "id">) => {
@@ -717,6 +733,7 @@ export function useAppData(user: User) {
       notes,
       xpEarned,
       createdAt: existing?.createdAt ?? nowStamp(),
+      year: parseISO(today).getFullYear(),
     };
     setHabitCompletions((prev) => {
       const exists = prev.some((x) => x.id === saved.id);
@@ -768,6 +785,7 @@ export function useAppData(user: User) {
     tasks, projects, goals, categories, categoriesById, projectsById, goalsById,
     habits, habitCompletions, activeHabits, todayHabitEntries, habitStreaks, habitChainDone, habitChainTotal,
     settings, patchSettings, setTheme, setWidgets, setNotifPrefs,
+    needsArchivePrompt, archiveYear, dismissArchivePrompt,
     toasts, burst, pushToast, fireConfetti,
     todayDone, todayTotal, todayPct, streak, longestStreak, xpToday, totalXP, level,
     focusTasks, upcoming, recentDone, weeklyData, monthlyData, weekDelta,

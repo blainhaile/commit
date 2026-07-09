@@ -2,7 +2,7 @@
    Small, reusable building blocks that define the design language:
    glass cards, metallic fills, calm motion.                            */
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { CalendarDays, Check, ChevronDown, ChevronRight, Sparkles, Target, Trophy, X, Zap } from "lucide-react";
+import { Archive, CalendarDays, Check, ChevronDown, ChevronRight, Sparkles, Target, Trophy, X, Zap } from "lucide-react";
 import type { Difficulty, Priority } from "@/types";
 import { DIFF_COLOR, PRIORITY_COLOR } from "@/utils/constants";
 import type { AppToast, ToastKind } from "@/hooks/useAppData";
