@@ -46,7 +46,10 @@ export function TasksPage({ app }: { app: AppData }) {
       .sort((a, b) => {
         const ad = a.status === "Completed", bd = b.status === "Completed";
         if (ad !== bd) return ad ? 1 : -1;
-        return (a.deadline || "9999") < (b.deadline || "9999") ? -1 : 1;
+        const ad2 = a.deadline || "9999", bd2 = b.deadline || "9999";
+        if (ad2 !== bd2) return ad2 < bd2 ? -1 : 1;
+        const at = a.deadlineTime || "", bt = b.deadlineTime || "";
+        return at < bt ? -1 : at > bt ? 1 : 0;
       });
   }, [tasks, quick, fPriority, fCategory, fProject, fGoal, fStatus, fDiff, q, today]);
 

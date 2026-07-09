@@ -63,7 +63,7 @@ function t(over: Partial<Task>): Task {
   return {
     id: uid("task"), title: "", description: "", notes: "", priority: "Medium",
     difficulty: "Medium", categoryId: "cat_personal", projectId: null, goalId: null,
-    deadline: null, startDate: null, duration: 60, recurring: "None", tags: [],
+    deadline: null, deadlineTime: null, startDate: null, duration: 60, recurring: "None", tags: [],
     status: "Not Started", subtasks: [], createdAt: daysAgo(10), completedAt: null,
     ...over,
   };

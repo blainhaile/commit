@@ -299,6 +299,7 @@ function taskFromMilestone(goal: Goal, title: string, projectId: string | null):
     projectId,
     goalId: goal.id,
     deadline: goal.targetDate,
+    deadlineTime: null,
     startDate: null,
     duration: 30,
     tags: [],

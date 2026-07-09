@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import type { AppData } from "@/hooks/useAppData";
 import type { Task } from "@/types";
 import { TaskRow } from "@/components/tasks";
-import { iso, parseISO, shortDate, todayISO, weekday } from "@/utils/date";
+import { formatTime, iso, parseISO, shortDate, todayISO, weekday } from "@/utils/date";
 
 const VIEWS = ["Month", "Week", "Day", "Agenda"] as const;
 type View = (typeof VIEWS)[number];
@@ -22,6 +22,12 @@ export function CalendarPage({ app }: { app: AppData }) {
       if (!task.deadline || task.status === "Archived") return;
       (map[task.deadline] = map[task.deadline] || []).push(task);
     });
+    // Untimed tasks first (all-day style), then timed tasks in ascending order —
+    // "" sorts before any "HH:mm" string, so a plain compare does both at once.
+    Object.values(map).forEach((list) => list.sort((a, b) => {
+      const at = a.deadlineTime || "", bt = b.deadlineTime || "";
+      return at < bt ? -1 : at > bt ? 1 : 0;
+    }));
     return map;
   }, [tasks]);
 
@@ -74,7 +80,7 @@ export function CalendarPage({ app }: { app: AppData }) {
                 style={{ background: `${c}1C`, color: c, fontWeight: 600, border: `1px solid ${c}30` }}
                 title={`${task.title} — drag to move deadline`}
               >
-                {task.title}
+                {task.deadlineTime && <span style={{ opacity: 0.7 }}>{formatTime(task.deadlineTime)} </span>}{task.title}
               </div>
             );
           })}
@@ -147,7 +153,11 @@ export function CalendarPage({ app }: { app: AppData }) {
   } else {
     const list = tasks
       .filter((x) => x.deadline && x.deadline >= today && x.status !== "Archived")
-      .sort((a, b) => (a.deadline! < b.deadline! ? -1 : 1))
+      .sort((a, b) => {
+        if (a.deadline !== b.deadline) return a.deadline! < b.deadline! ? -1 : 1;
+        const at = a.deadlineTime || "", bt = b.deadlineTime || "";
+        return at < bt ? -1 : at > bt ? 1 : 0;
+      })
       .slice(0, 30);
     const groups: Record<string, Task[]> = {};
     list.forEach((x) => (groups[x.deadline!] = groups[x.deadline!] || []).push(x));

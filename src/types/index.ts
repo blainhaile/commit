@@ -25,6 +25,7 @@ export interface Task {
   projectId: string | null;
   goalId: string | null;
   deadline: string | null;   // YYYY-MM-DD
+  deadlineTime: string | null; // "HH:mm" (24h), optional; null = date-only deadline
   startDate: string | null;  // YYYY-MM-DD
   duration: number;          // minutes
   tags: string[];

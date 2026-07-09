@@ -56,6 +56,7 @@ create table if not exists public.tasks (
   project_id   text,
   goal_id      text,
   deadline     date,
+  deadline_time text,  -- optional "HH:mm" (24h), null = date-only deadline
   start_date   date,
   duration     integer not null default 30,         -- minutes
   tags         text[] not null default '{}',
@@ -114,6 +115,7 @@ create table if not exists public.habit_completions (
 alter table public.categories add column if not exists sort_index integer not null default 0;
 alter table public.goals      add column if not exists sort_index integer not null default 0;
 alter table public.projects   add column if not exists sort_index integer not null default 0;
+alter table public.tasks      add column if not exists deadline_time text;
 
 -- ── Indexes ─────────────────────────────────────────────────────────
 create index if not exists tasks_user_idx              on public.tasks (user_id);

@@ -463,6 +463,31 @@ export function useAppData(user: User) {
     pushToast({ kind: "date", title: "Deadline moved", sub: `Now due ${shortDate(dateStr)}` });
   }, [pushToast, userId]);
 
+  /** Shared write path for the task's own subtasks — the SAME task.subtasks field and
+   *  db.upsertTask call the full edit modal uses, just committed immediately per action
+   *  instead of batched behind a "Save changes" click. No parallel/duplicate state. */
+  const updateTaskSubtasks = useCallback((taskId: string, updater: (subs: Task["subtasks"]) => Task["subtasks"]) => {
+    setTasks((prev) => prev.map((x) => {
+      if (x.id !== taskId) return x;
+      const updated = { ...x, subtasks: updater(x.subtasks) };
+      db.upsertTask(updated, userId);
+      return updated;
+    }));
+  }, [userId]);
+
+  const toggleSubtask = useCallback((taskId: string, subId: string) => {
+    updateTaskSubtasks(taskId, (subs) => subs.map((s) => (s.id === subId ? { ...s, done: !s.done } : s)));
+  }, [updateTaskSubtasks]);
+
+  const addSubtask = useCallback((taskId: string, title: string) => {
+    if (!title.trim()) return;
+    updateTaskSubtasks(taskId, (subs) => [...subs, { id: uid("s"), title: title.trim(), done: false }]);
+  }, [updateTaskSubtasks]);
+
+  const removeSubtask = useCallback((taskId: string, subId: string) => {
+    updateTaskSubtasks(taskId, (subs) => subs.filter((s) => s.id !== subId));
+  }, [updateTaskSubtasks]);
+
   const toggleMilestone = useCallback((goalId: string, mId: string) => {
     const g = goals.find((x) => x.id === goalId);
     if (!g) return;
@@ -690,7 +715,7 @@ export function useAppData(user: User) {
     todayDone, todayTotal, todayPct, streak, longestStreak, xpToday, totalXP, level,
     focusTasks, upcoming, recentDone, weeklyData, monthlyData, weekDelta,
     projectStats, categoryStats, goalStats, analytics,
-    toggleComplete, saveTask, deleteTask, moveDeadline, toggleMilestone,
+    toggleComplete, saveTask, deleteTask, moveDeadline, toggleMilestone, toggleSubtask, addSubtask, removeSubtask,
     saveProject, deleteProject, reorderProjects, saveGoal, deleteGoal, reorderGoals,
     saveCategory, deleteCategory, reorderCategories, loadSample,
     saveHabit, deleteHabit, logHabitCompletion,

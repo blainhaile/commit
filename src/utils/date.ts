@@ -21,6 +21,14 @@ export const nowStamp = () => {
   return `${todayISO()}T${pad(n.getHours())}:${pad(n.getMinutes())}:00`;
 };
 
+/** "14:30" -> "2:30 PM" */
+export function formatTime(hhmm: string): string {
+  const [h, m] = hhmm.split(":").map(Number);
+  const ampm = h >= 12 ? "PM" : "AM";
+  const hh = h % 12 === 0 ? 12 : h % 12;
+  return `${hh}:${pad(m)} ${ampm}`;
+}
+
 export function relativeDeadline(deadline: string | null): { label: string; tone: "over" | "today" | "soon" | "later" } | null {
   if (!deadline) return null;
   const t = todayISO();
