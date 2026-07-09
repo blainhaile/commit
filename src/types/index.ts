@@ -40,6 +40,7 @@ export interface Project {
   categoryId: string | null;
   goalId: string | null;
   targetDate: string | null;
+  sortIndex: number;
 }
 
 export interface Milestone {
@@ -55,6 +56,7 @@ export interface Goal {
   categoryId: string | null;
   targetDate: string | null;
   milestones: Milestone[];
+  sortIndex: number;
 }
 
 export interface Category {
@@ -62,6 +64,7 @@ export interface Category {
   name: string;
   color: string;
   icon: string; // lucide icon name
+  sortIndex: number;
 }
 
 export interface WidgetPrefs {

@@ -11,6 +11,7 @@ create table if not exists public.categories (
   name       text not null,
   color      text not null default '#7091E6',
   icon       text not null default 'Tag',
+  sort_index integer not null default 0,  -- manual drag-and-drop order
   created_at timestamptz not null default now()
 );
 
@@ -23,6 +24,7 @@ create table if not exists public.goals (
   category_id text,
   target_date date,
   milestones  jsonb not null default '[]'::jsonb,  -- [{id,title,done}]
+  sort_index  integer not null default 0,           -- manual drag-and-drop order
   created_at  timestamptz not null default now()
 );
 
@@ -35,6 +37,7 @@ create table if not exists public.projects (
   category_id text,
   goal_id     text,
   target_date date,
+  sort_index  integer not null default 0,  -- manual drag-and-drop order
   created_at  timestamptz not null default now()
 );
 
@@ -102,6 +105,15 @@ create table if not exists public.habit_completions (
   created_at  timestamptz not null default now(),
   unique (habit_id, date)
 );
+
+-- ── Manual ordering (drag-and-drop) ─────────────────────────────────
+-- Safe to leave here and re-run anytime — only adds the column if missing.
+-- Existing rows default to 0; run the one-time backfill separately to seed
+-- initial order from created_at (do NOT add that backfill here — re-running
+-- it later would silently overwrite any manual reordering you've since done).
+alter table public.categories add column if not exists sort_index integer not null default 0;
+alter table public.goals      add column if not exists sort_index integer not null default 0;
+alter table public.projects   add column if not exists sort_index integer not null default 0;
 
 -- ── Indexes ─────────────────────────────────────────────────────────
 create index if not exists tasks_user_idx              on public.tasks (user_id);

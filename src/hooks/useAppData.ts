@@ -467,6 +467,26 @@ export function useAppData(user: User) {
     setEditorProject(null);
   }, [projects]);
 
+  /** Drag-and-drop reorder: moves draggedId next to dropId, reindexes sortIndex
+   *  for the whole list, and persists every reindexed row. */
+  const reorderProjects = useCallback((draggedId: string, dropId: string) => {
+    if (draggedId === dropId) return;
+    setProjects((prev) => {
+      const from = prev.findIndex((x) => x.id === draggedId);
+      const to = prev.findIndex((x) => x.id === dropId);
+      if (from === -1 || to === -1) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next.map((p, i) => {
+        if (p.sortIndex === i) return p;
+        const updated = { ...p, sortIndex: i };
+        db.upsertProject(updated, userId);
+        return updated;
+      });
+    });
+  }, [userId]);
+
   const saveGoal = useCallback((form: Goal) => {
     setGoals((prev) => {
       const exists = prev.some((x) => x.id === form.id);
@@ -482,6 +502,24 @@ export function useAppData(user: User) {
     setEditorGoal(null);
   }, []);
 
+  const reorderGoals = useCallback((draggedId: string, dropId: string) => {
+    if (draggedId === dropId) return;
+    setGoals((prev) => {
+      const from = prev.findIndex((x) => x.id === draggedId);
+      const to = prev.findIndex((x) => x.id === dropId);
+      if (from === -1 || to === -1) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next.map((g, i) => {
+        if (g.sortIndex === i) return g;
+        const updated = { ...g, sortIndex: i };
+        db.upsertGoal(updated, userId);
+        return updated;
+      });
+    });
+  }, [userId]);
+
   const saveCategory = useCallback((form: Category) => {
     setCategories((prev) => {
       const exists = prev.some((x) => x.id === form.id);
@@ -496,6 +534,24 @@ export function useAppData(user: User) {
     db.deleteCategory(id);
     setEditorCategory(null);
   }, []);
+
+  const reorderCategories = useCallback((draggedId: string, dropId: string) => {
+    if (draggedId === dropId) return;
+    setCategories((prev) => {
+      const from = prev.findIndex((x) => x.id === draggedId);
+      const to = prev.findIndex((x) => x.id === dropId);
+      if (from === -1 || to === -1) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next.map((c, i) => {
+        if (c.sortIndex === i) return c;
+        const updated = { ...c, sortIndex: i };
+        db.upsertCategory(updated, userId);
+        return updated;
+      });
+    });
+  }, [userId]);
 
   const saveHabit = useCallback((form: Habit) => {
     setHabits((prev) => {
@@ -561,15 +617,15 @@ export function useAppData(user: User) {
   const openEditTask = useCallback((task: Task) => setEditorTask(task), []);
   const closeEditor = useCallback(() => setEditorTask(null), []);
 
-  const openNewProject = useCallback(() => setEditorProject({}), []);
+  const openNewProject = useCallback(() => setEditorProject({ sortIndex: projects.length }), [projects.length]);
   const openEditProject = useCallback((p: Project) => setEditorProject(p), []);
   const closeProjectEditor = useCallback(() => setEditorProject(null), []);
 
-  const openNewGoal = useCallback(() => setEditorGoal({}), []);
+  const openNewGoal = useCallback(() => setEditorGoal({ sortIndex: goals.length }), [goals.length]);
   const openEditGoal = useCallback((g: Goal) => setEditorGoal(g), []);
   const closeGoalEditor = useCallback(() => setEditorGoal(null), []);
 
-  const openNewCategory = useCallback(() => setEditorCategory({}), []);
+  const openNewCategory = useCallback(() => setEditorCategory({ sortIndex: categories.length }), [categories.length]);
   const openEditCategory = useCallback((c: Category) => setEditorCategory(c), []);
   const closeCategoryEditor = useCallback(() => setEditorCategory(null), []);
 
@@ -587,7 +643,8 @@ export function useAppData(user: User) {
     focusTasks, upcoming, recentDone, weeklyData, monthlyData, weekDelta,
     projectStats, categoryStats, goalStats, analytics,
     toggleComplete, saveTask, deleteTask, moveDeadline, toggleMilestone,
-    saveProject, deleteProject, saveGoal, deleteGoal, saveCategory, deleteCategory, loadSample,
+    saveProject, deleteProject, reorderProjects, saveGoal, deleteGoal, reorderGoals,
+    saveCategory, deleteCategory, reorderCategories, loadSample,
     saveHabit, deleteHabit, logHabitCompletion,
     editorTask, openNewTask, openNewTaskOn, openEditTask, closeEditor,
     editorProject, openNewProject, openEditProject, closeProjectEditor,

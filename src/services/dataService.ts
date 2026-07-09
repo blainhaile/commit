@@ -58,26 +58,28 @@ function toLocalStamp(ts: string): string {
 
 const projectToRow = (p: Project, userId: string) => ({
   id: p.id, user_id: userId, name: p.name, description: p.description,
-  category_id: p.categoryId, goal_id: p.goalId, target_date: p.targetDate,
+  category_id: p.categoryId, goal_id: p.goalId, target_date: p.targetDate, sort_index: p.sortIndex,
 });
 const rowToProject = (r: any): Project => ({
   id: r.id, name: r.name, description: r.description ?? "",
-  categoryId: r.category_id, goalId: r.goal_id, targetDate: r.target_date,
+  categoryId: r.category_id, goalId: r.goal_id, targetDate: r.target_date, sortIndex: r.sort_index ?? 0,
 });
 
 const goalToRow = (g: Goal, userId: string) => ({
   id: g.id, user_id: userId, name: g.name, description: g.description,
-  category_id: g.categoryId, target_date: g.targetDate, milestones: g.milestones,
+  category_id: g.categoryId, target_date: g.targetDate, milestones: g.milestones, sort_index: g.sortIndex,
 });
 const rowToGoal = (r: any): Goal => ({
   id: r.id, name: r.name, description: r.description ?? "",
-  categoryId: r.category_id, targetDate: r.target_date, milestones: r.milestones ?? [],
+  categoryId: r.category_id, targetDate: r.target_date, milestones: r.milestones ?? [], sortIndex: r.sort_index ?? 0,
 });
 
 const categoryToRow = (c: Category, userId: string) => ({
-  id: c.id, user_id: userId, name: c.name, color: c.color, icon: c.icon,
+  id: c.id, user_id: userId, name: c.name, color: c.color, icon: c.icon, sort_index: c.sortIndex,
 });
-const rowToCategory = (r: any): Category => ({ id: r.id, name: r.name, color: r.color, icon: r.icon });
+const rowToCategory = (r: any): Category => ({
+  id: r.id, name: r.name, color: r.color, icon: r.icon, sortIndex: r.sort_index ?? 0,
+});
 
 const habitToRow = (h: Habit, userId: string) => ({
   id: h.id,
@@ -166,9 +168,9 @@ export interface Snapshot {
 export async function loadAll(userId: string): Promise<Snapshot> {
   const [tasks, projects, goals, categories, habits, habitCompletions, settings] = await Promise.all([
     supabase.from("tasks").select("*").order("created_at"),
-    supabase.from("projects").select("*").order("created_at"),
-    supabase.from("goals").select("*").order("created_at"),
-    supabase.from("categories").select("*").order("created_at"),
+    supabase.from("projects").select("*").order("sort_index"),
+    supabase.from("goals").select("*").order("sort_index"),
+    supabase.from("categories").select("*").order("sort_index"),
     supabase.from("habits").select("*").order("created_at"),
     supabase.from("habit_completions").select("*").order("date"),
     supabase.from("settings").select("data").eq("user_id", userId).maybeSingle(),

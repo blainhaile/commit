@@ -16,7 +16,7 @@ export const seedCategories: Category[] = [
   { id: "cat_travel",   name: "Travel",     color: "#3DA08A", icon: "Plane" },
   { id: "cat_content",  name: "Content",    color: "#C0455E", icon: "PenLine" },
   { id: "cat_home",     name: "Home",       color: "#7091E6", icon: "Home" },
-];
+].map((c, i) => ({ ...c, sortIndex: i }));
 
 export const seedGoals: Goal[] = [
   { id: "goal_aws", name: "Pass AWS Certification", description: "Earn the Solutions Architect Associate credential.", categoryId: "cat_career", targetDate: daysAhead(42),
@@ -49,7 +49,7 @@ export const seedGoals: Goal[] = [
       { id: "m14", title: "Down payment saved", done: false },
       { id: "m15", title: "Pre-approval letter", done: false },
     ] },
-];
+].map((g, i) => ({ ...g, sortIndex: i }));
 
 export const seedProjects: Project[] = [
   { id: "proj_aws",  name: "AWS Certification",   description: "Study plan, practice exams, booking.", categoryId: "cat_career", goalId: "goal_aws",  targetDate: daysAhead(40) },
@@ -57,7 +57,7 @@ export const seedProjects: Project[] = [
   { id: "proj_site", name: "ServeCyber Website",  description: "Design, build, launch.",               categoryId: "cat_cyber",  goalId: "goal_sc",   targetDate: daysAhead(30) },
   { id: "proj_apt",  name: "Apartment Search",    description: "Shortlist, tour, apply.",              categoryId: "cat_home",   goalId: "goal_home", targetDate: daysAhead(60) },
   { id: "proj_conf", name: "Conference Planning", description: "Talk proposal, travel, logistics.",    categoryId: "cat_travel", goalId: null,        targetDate: daysAhead(50) },
-];
+].map((p, i) => ({ ...p, sortIndex: i }));
 
 function t(over: Partial<Task>): Task {
   return {

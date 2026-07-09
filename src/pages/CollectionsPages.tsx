@@ -1,7 +1,7 @@
 /* ── Commit · Projects, Goals, Categories ───────────────────────────── */
 import React, { useState } from "react";
 import {
-  CalendarDays, CheckSquare, FolderKanban, Layers, Pencil, Plus, Tag, Target, TrendingDown, TrendingUp, Trash2, X,
+  CalendarDays, CheckSquare, FolderKanban, GripVertical, Layers, Pencil, Plus, Tag, Target, TrendingDown, TrendingUp, Trash2, X,
 } from "lucide-react";
 import type { Category, Goal, Project } from "@/types";
 import type { AppData } from "@/hooks/useAppData";
@@ -9,9 +9,55 @@ import { CheckButton, Dot, EmptyState, Field, Modal, ProgressBar, Ring } from "@
 import { daysAhead, shortDate } from "@/utils/date";
 import { uid } from "@/utils/constants";
 
+/* ---------- shared drag-to-reorder helper (plain HTML5 DnD, no library) ---------- */
+function useReorderDrag(reorder: (draggedId: string, dropId: string) => void) {
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
+
+  const handleProps = (id: string) => ({
+    draggable: true,
+    onDragStart: (e: React.DragEvent) => { e.dataTransfer.setData("text/reorder-id", id); setDragId(id); },
+    onDragEnd: () => { setDragId(null); setOverId(null); },
+  });
+
+  const targetProps = (id: string) => ({
+    onDragOver: (e: React.DragEvent) => { if (dragId && dragId !== id) { e.preventDefault(); setOverId(id); } },
+    onDragLeave: () => setOverId((cur) => (cur === id ? null : cur)),
+    onDrop: (e: React.DragEvent) => {
+      e.preventDefault();
+      const draggedId = e.dataTransfer.getData("text/reorder-id");
+      if (draggedId && draggedId !== id) reorder(draggedId, id);
+      setDragId(null);
+      setOverId(null);
+    },
+  });
+
+  const dragStyle = (id: string): React.CSSProperties => ({
+    opacity: dragId === id ? 0.4 : 1,
+    outline: overId === id && dragId && dragId !== id ? "2px solid var(--brand-2)" : "2px solid transparent",
+    outlineOffset: 2,
+  });
+
+  return { handleProps, targetProps, dragStyle };
+}
+
+function DragHandle(props: React.HTMLAttributes<HTMLSpanElement>) {
+  return (
+    <span
+      {...props}
+      className="t-faint opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing shrink-0 mt-0.5"
+      title="Drag to reorder"
+      aria-label="Drag to reorder"
+    >
+      <GripVertical size={14} />
+    </span>
+  );
+}
+
 /* ════════ Projects ════════ */
 export function ProjectsPage({ app }: { app: AppData }) {
-  const { projects, projectStats, categoriesById, goalsById, openNewProject, openEditProject, loadSample } = app;
+  const { projects, projectStats, categoriesById, goalsById, openNewProject, openEditProject, reorderProjects, loadSample } = app;
+  const drag = useReorderDrag(reorderProjects);
 
   return (
     <div className="cm-page flex flex-col gap-4">
@@ -19,6 +65,7 @@ export function ProjectsPage({ app }: { app: AppData }) {
         <h1 className="cm-display text-2xl font-extrabold t-text">Projects</h1>
         <button className="cm-btn cm-btn-primary" onClick={openNewProject}><Plus size={16} /> New project</button>
       </div>
+      {projects.length > 1 && <div className="text-xs t-faint -mt-2">Drag the grip to reorder.</div>}
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 cm-stagger">
         {projects.map((p) => {
@@ -26,13 +73,21 @@ export function ProjectsPage({ app }: { app: AppData }) {
           const cat = p.categoryId ? categoriesById[p.categoryId] : null;
           const goal = p.goalId ? goalsById[p.goalId] : null;
           return (
-            <div key={p.id} className="cm-card cm-card-hover p-5 flex flex-col gap-3 group">
+            <div
+              key={p.id}
+              className="cm-card cm-card-hover p-5 flex flex-col gap-3 group"
+              style={drag.dragStyle(p.id)}
+              {...drag.targetProps(p.id)}
+            >
               <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="cm-display font-bold t-text truncate">{p.name}</div>
-                  <div className="text-xs t-muted mt-1 flex items-center gap-1.5">
-                    {cat && <><Dot color={cat.color} /> {cat.name}</>}
-                    {goal && <span className="t-faint truncate">· {goal.name}</span>}
+                <div className="flex items-start gap-2 min-w-0">
+                  <DragHandle {...drag.handleProps(p.id)} />
+                  <div className="min-w-0">
+                    <div className="cm-display font-bold t-text truncate">{p.name}</div>
+                    <div className="text-xs t-muted mt-1 flex items-center gap-1.5">
+                      {cat && <><Dot color={cat.color} /> {cat.name}</>}
+                      {goal && <span className="t-faint truncate">· {goal.name}</span>}
+                    </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
@@ -77,7 +132,7 @@ export function ProjectsPage({ app }: { app: AppData }) {
 }
 
 function blankProject(): Project {
-  return { id: uid("proj"), name: "", description: "", categoryId: null, goalId: null, targetDate: daysAhead(30) };
+  return { id: uid("proj"), name: "", description: "", categoryId: null, goalId: null, targetDate: daysAhead(30), sortIndex: 0 };
 }
 
 export function ProjectModal({ app }: { app: AppData }) {
@@ -137,7 +192,8 @@ export function ProjectModal({ app }: { app: AppData }) {
 
 /* ════════ Goals ════════ */
 export function GoalsPage({ app }: { app: AppData }) {
-  const { goals, goalStats, toggleMilestone, openNewGoal, openEditGoal, loadSample } = app;
+  const { goals, goalStats, toggleMilestone, openNewGoal, openEditGoal, reorderGoals, loadSample } = app;
+  const drag = useReorderDrag(reorderGoals);
 
   return (
     <div className="cm-page flex flex-col gap-4">
@@ -145,18 +201,27 @@ export function GoalsPage({ app }: { app: AppData }) {
         <h1 className="cm-display text-2xl font-extrabold t-text">Goals</h1>
         <button className="cm-btn cm-btn-primary" onClick={openNewGoal}><Plus size={16} /> New goal</button>
       </div>
+      {goals.length > 1 && <div className="text-xs t-faint -mt-2">Drag the grip to reorder.</div>}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 cm-stagger">
         {goals.map((g) => {
           const s = goalStats[g.id];
           return (
-            <div key={g.id} className="cm-card cm-card-hover p-5 flex flex-col gap-3 group">
+            <div
+              key={g.id}
+              className="cm-card cm-card-hover p-5 flex flex-col gap-3 group"
+              style={drag.dragStyle(g.id)}
+              {...drag.targetProps(g.id)}
+            >
               <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="cm-display font-bold t-text flex items-center gap-2">
-                    <Target size={16} className="t-brand shrink-0" /> {g.name}
+                <div className="flex items-start gap-2 min-w-0">
+                  <DragHandle {...drag.handleProps(g.id)} />
+                  <div className="min-w-0">
+                    <div className="cm-display font-bold t-text flex items-center gap-2">
+                      <Target size={16} className="t-brand shrink-0" /> {g.name}
+                    </div>
+                    <div className="text-sm t-muted mt-1">{g.description}</div>
                   </div>
-                  <div className="text-sm t-muted mt-1">{g.description}</div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <button
@@ -213,7 +278,7 @@ export function GoalsPage({ app }: { app: AppData }) {
 }
 
 function blankGoal(): Goal {
-  return { id: uid("goal"), name: "", description: "", categoryId: null, targetDate: daysAhead(90), milestones: [] };
+  return { id: uid("goal"), name: "", description: "", categoryId: null, targetDate: daysAhead(90), milestones: [], sortIndex: 0 };
 }
 
 export function GoalModal({ app }: { app: AppData }) {
@@ -300,7 +365,8 @@ export function GoalModal({ app }: { app: AppData }) {
 const SWATCHES = ["#3D52A0", "#7091E6", "#8A5CB8", "#4E9B6E", "#B08A3D", "#C77B3F", "#C0455E", "#B85C8A", "#3D8AA0", "#3DA08A"];
 
 export function CategoriesPage({ app }: { app: AppData }) {
-  const { categories, categoryStats, openNewCategory, openEditCategory } = app;
+  const { categories, categoryStats, openNewCategory, openEditCategory, reorderCategories } = app;
+  const drag = useReorderDrag(reorderCategories);
 
   return (
     <div className="cm-page flex flex-col gap-4">
@@ -308,15 +374,22 @@ export function CategoriesPage({ app }: { app: AppData }) {
         <h1 className="cm-display text-2xl font-extrabold t-text">Categories</h1>
         <button className="cm-btn cm-btn-primary" onClick={openNewCategory}><Plus size={16} /> New category</button>
       </div>
+      {categories.length > 1 && <div className="text-xs t-faint -mt-2">Drag the grip to reorder.</div>}
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 cm-stagger">
         {categories.map((c) => {
           const s = categoryStats[c.id];
           const up = s.trend >= 0;
           return (
-            <div key={c.id} className="cm-card cm-card-hover p-5 flex flex-col gap-3 group">
+            <div
+              key={c.id}
+              className="cm-card cm-card-hover p-5 flex flex-col gap-3 group"
+              style={drag.dragStyle(c.id)}
+              {...drag.targetProps(c.id)}
+            >
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-2">
+                  <DragHandle {...drag.handleProps(c.id)} />
                   <Dot color={c.color} size={12} />
                   <span className="cm-display font-bold t-text">{c.name}</span>
                 </div>
@@ -357,7 +430,7 @@ export function CategoriesPage({ app }: { app: AppData }) {
 }
 
 function blankCategory(): Category {
-  return { id: uid("cat"), name: "", color: SWATCHES[0], icon: "Tag" };
+  return { id: uid("cat"), name: "", color: SWATCHES[0], icon: "Tag", sortIndex: 0 };
 }
 
 export function CategoryModal({ app }: { app: AppData }) {
