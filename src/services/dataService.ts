@@ -71,7 +71,10 @@ const goalToRow = (g: Goal, userId: string) => ({
 });
 const rowToGoal = (r: any): Goal => ({
   id: r.id, name: r.name, description: r.description ?? "",
-  categoryId: r.category_id, targetDate: r.target_date, milestones: r.milestones ?? [], sortIndex: r.sort_index ?? 0,
+  categoryId: r.category_id, targetDate: r.target_date,
+  // Legacy rows' milestone objects may not have a taskId key at all — normalize to null (unlinked).
+  milestones: (r.milestones ?? []).map((m: any) => ({ ...m, taskId: m.taskId ?? null })),
+  sortIndex: r.sort_index ?? 0,
 });
 
 const categoryToRow = (c: Category, userId: string) => ({

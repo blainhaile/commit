@@ -49,7 +49,7 @@ export const seedGoals: Goal[] = [
       { id: "m14", title: "Down payment saved", done: false },
       { id: "m15", title: "Pre-approval letter", done: false },
     ] },
-].map((g, i) => ({ ...g, sortIndex: i }));
+].map((g, i) => ({ ...g, sortIndex: i, milestones: g.milestones.map((m) => ({ ...m, taskId: null })) }));
 
 export const seedProjects: Project[] = [
   { id: "proj_aws",  name: "AWS Certification",   description: "Study plan, practice exams, booking.", categoryId: "cat_career", goalId: "goal_aws",  targetDate: daysAhead(40) },

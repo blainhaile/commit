@@ -47,6 +47,7 @@ export interface Milestone {
   id: string;
   title: string;
   done: boolean;
+  taskId: string | null; // links this milestone to a real Task; null = plain checklist item
 }
 
 export interface Goal {

@@ -1,12 +1,13 @@
 /* ── Commit · Projects, Goals, Categories ───────────────────────────── */
 import React, { useState } from "react";
 import {
-  CalendarDays, CheckSquare, FolderKanban, GripVertical, Layers, Pencil, Plus, Tag, Target, TrendingDown, TrendingUp, Trash2, X,
+  CalendarDays, CheckSquare, FolderKanban, GripVertical, Layers, Link2, Pencil, Plus, Tag, Target,
+  TrendingDown, TrendingUp, Trash2, X,
 } from "lucide-react";
-import type { Category, Goal, Project } from "@/types";
+import type { Category, Goal, Milestone, Project, Task } from "@/types";
 import type { AppData } from "@/hooks/useAppData";
-import { CheckButton, Dot, EmptyState, Field, Modal, ProgressBar, Ring } from "@/components/ui";
-import { daysAhead, shortDate } from "@/utils/date";
+import { CheckButton, Dot, EmptyState, Field, Modal, ProgressBar, Ring, Switch } from "@/components/ui";
+import { daysAhead, shortDate, todayISO } from "@/utils/date";
 import { uid } from "@/utils/constants";
 
 /* ---------- shared drag-to-reorder helper (plain HTML5 DnD, no library) ---------- */
@@ -250,6 +251,7 @@ export function GoalsPage({ app }: { app: AppData }) {
                       <div key={m.id} className="flex items-center gap-2.5 text-sm">
                         <CheckButton on={m.done} onClick={() => toggleMilestone(g.id, m.id)} title="Toggle milestone" />
                         <span className={`t-text ${m.done ? "line-through opacity-50" : ""}`}>{m.title}</span>
+                        {m.taskId && <span title="Linked to a task"><Link2 size={12} className="t-faint shrink-0" /></span>}
                       </div>
                     ))}
                   </div>
@@ -281,21 +283,89 @@ function blankGoal(): Goal {
   return { id: uid("goal"), name: "", description: "", categoryId: null, targetDate: daysAhead(90), milestones: [], sortIndex: 0 };
 }
 
+/** Sensible defaults for a task spun off from a milestone — inherits the goal's
+ *  category and target date, since it's a piece of the same plan. */
+function taskFromMilestone(goal: Goal, title: string, projectId: string | null): Task {
+  return {
+    id: uid("task"),
+    title,
+    description: "",
+    notes: "",
+    priority: "Medium",
+    difficulty: "Medium",
+    status: "Not Started",
+    recurring: "None",
+    categoryId: goal.categoryId,
+    projectId,
+    goalId: goal.id,
+    deadline: goal.targetDate,
+    startDate: null,
+    duration: 30,
+    tags: [],
+    subtasks: [],
+    createdAt: todayISO(),
+    completedAt: null,
+  };
+}
+
 export function GoalModal({ app }: { app: AppData }) {
-  const { editorGoal, categories, saveGoal, closeGoalEditor, deleteGoal } = app;
+  const { editorGoal, categories, projects, saveGoal, saveTask, closeGoalEditor, deleteGoal } = app;
   const initial = editorGoal!;
   const [form, setForm] = useState<Goal>(() => ({ ...blankGoal(), ...initial }));
   const [mTitle, setMTitle] = useState("");
+  const [createTask, setCreateTask] = useState(false);
+  const [mProjectId, setMProjectId] = useState<string | null>(null);
+  // Tasks spun off from "also create as a task" milestones, keyed by their (not-yet-
+  // persisted) task id. Only written to Supabase once the goal itself is saved, so
+  // Cancel discards them the same way an unsaved plain milestone is discarded.
+  const [pendingTasks, setPendingTasks] = useState<Record<string, Task>>({});
   const set = <K extends keyof Goal>(k: K, v: Goal[K]) => setForm((f) => ({ ...f, [k]: v }));
+
+  const linkedProjects = projects.filter((p) => p.goalId === form.id);
 
   const addMilestone = () => {
     if (!mTitle.trim()) return;
-    set("milestones", [...form.milestones, { id: uid("m"), title: mTitle.trim(), done: false }]);
+    let taskId: string | null = null;
+    if (createTask) {
+      const task = taskFromMilestone(form, mTitle.trim(), mProjectId);
+      taskId = task.id;
+      setPendingTasks((prev) => ({ ...prev, [task.id]: task }));
+    }
+    set("milestones", [...form.milestones, { id: uid("m"), title: mTitle.trim(), done: false, taskId }]);
     setMTitle("");
+    setCreateTask(false);
+    setMProjectId(null);
+  };
+
+  const toggleFormMilestone = (m: Milestone) => {
+    const nextDone = !m.done;
+    set("milestones", form.milestones.map((x) => (x.id === m.id ? { ...x, done: nextDone } : x)));
+    // Keep a not-yet-saved linked task's status in step, so a milestone checked
+    // before the goal is even saved still lands consistent on first save.
+    if (m.taskId && pendingTasks[m.taskId]) {
+      setPendingTasks((prev) => ({
+        ...prev,
+        [m.taskId!]: { ...prev[m.taskId!], status: nextDone ? "Completed" : "Not Started", completedAt: nextDone ? new Date().toISOString() : null },
+      }));
+    }
+  };
+
+  const removeMilestone = (m: Milestone) => {
+    set("milestones", form.milestones.filter((x) => x.id !== m.id));
+    // Only drop the task if it was never actually created yet — an already-real
+    // linked task survives, per the unlink-not-cascade-delete rule.
+    if (m.taskId && pendingTasks[m.taskId]) {
+      setPendingTasks((prev) => {
+        const next = { ...prev };
+        delete next[m.taskId!];
+        return next;
+      });
+    }
   };
 
   const save = () => {
     if (!form.name.trim()) return;
+    Object.values(pendingTasks).forEach((t) => saveTask(t));
     saveGoal(form);
   };
 
@@ -322,11 +392,12 @@ export function GoalModal({ app }: { app: AppData }) {
           <div className="flex flex-col gap-1.5 mb-2">
             {form.milestones.map((m) => (
               <div key={m.id} className="cm-inset flex items-center gap-2.5 text-sm px-3 py-2">
-                <CheckButton on={m.done} onClick={() => set("milestones", form.milestones.map((x) => (x.id === m.id ? { ...x, done: !x.done } : x)))} />
+                <CheckButton on={m.done} onClick={() => toggleFormMilestone(m)} />
                 <span className={`t-text ${m.done ? "line-through opacity-50" : ""}`}>{m.title}</span>
+                {m.taskId && <span title="Linked to a task"><Link2 size={12} className="t-faint shrink-0" /></span>}
                 <button
                   className="ml-auto t-faint hover:text-[var(--bad)] transition-colors"
-                  onClick={() => set("milestones", form.milestones.filter((x) => x.id !== m.id))}
+                  onClick={() => removeMilestone(m)}
                   aria-label="Remove milestone"
                 >
                   <X size={14} />
@@ -334,15 +405,27 @@ export function GoalModal({ app }: { app: AppData }) {
               </div>
             ))}
           </div>
-          <div className="flex gap-2">
-            <input
-              className="cm-input"
-              placeholder="Add a milestone"
-              value={mTitle}
-              onChange={(e) => setMTitle(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && addMilestone()}
-            />
-            <button className="cm-btn cm-btn-ghost shrink-0" onClick={addMilestone}>Add</button>
+          <div className="cm-inset flex flex-col gap-2.5 p-3">
+            <div className="flex gap-2">
+              <input
+                className="cm-input"
+                placeholder="Add a milestone"
+                value={mTitle}
+                onChange={(e) => setMTitle(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && addMilestone()}
+              />
+              <button className="cm-btn cm-btn-ghost shrink-0" onClick={addMilestone}>Add</button>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs t-muted">Also create as a task</span>
+              <Switch on={createTask} onChange={setCreateTask} label="Also create as a task" />
+            </div>
+            {createTask && linkedProjects.length > 0 && (
+              <select className="cm-select" value={mProjectId ?? ""} onChange={(e) => setMProjectId(e.target.value || null)}>
+                <option value="">No project</option>
+                {linkedProjects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-3 mt-2">

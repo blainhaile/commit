@@ -323,17 +323,36 @@ export function useAppData(user: User) {
 
   /* ---------- actions (optimistic + persisted) ---------- */
 
-  const toggleComplete = useCallback((id: string) => {
+  /** Core task-completion transition (Completed ↔ In Progress), shared by the task
+   *  checkbox and by milestone-driven completion. `syncMilestone` (default true) also
+   *  flips any goal milestone linked to this task via milestone.taskId — pass false
+   *  when the caller is itself the milestone side, to avoid syncing back into itself. */
+  const setTaskCompletion = useCallback((id: string, done: boolean, opts?: { syncMilestone?: boolean }) => {
     const task = tasks.find((x) => x.id === id);
     if (!task) return;
+    const syncMilestone = opts?.syncMilestone !== false;
 
-    if (task.status === "Completed") {
+    const syncLinkedMilestone = (doneVal: boolean) => {
+      if (!syncMilestone || !task.goalId) return;
+      const g = goals.find((x) => x.id === task.goalId);
+      if (!g) return;
+      const m = g.milestones.find((x) => x.taskId === id);
+      if (!m || m.done === doneVal) return;
+      const nextGoal = { ...g, milestones: g.milestones.map((x) => (x.id === m.id ? { ...x, done: doneVal } : x)) };
+      setGoals((prev) => prev.map((x) => (x.id === g.id ? nextGoal : x)));
+      db.upsertGoal(nextGoal, userId);
+    };
+
+    if (!done) {
+      if (task.status !== "Completed") return;
       const reverted: Task = { ...task, status: "In Progress", completedAt: null };
       setTasks((prev) => prev.map((x) => (x.id === id ? reverted : x)));
       db.upsertTask(reverted, userId);
+      syncLinkedMilestone(false);
       return;
     }
 
+    if (task.status === "Completed") return;
     const stamp = nowStamp();
     const xp = XP_BY_DIFFICULTY[task.difficulty];
     const completed: Task = {
@@ -386,7 +405,14 @@ export function useAppData(user: User) {
         window.setTimeout(() => pushToast({ kind: "goal", title: `Goal complete: ${g.name}`, sub: "That one's in the books." }), 200);
       }
     }
+    syncLinkedMilestone(true);
   }, [tasks, today, totalXP, goals, pushToast, fireConfetti, userId]);
+
+  const toggleComplete = useCallback((id: string) => {
+    const task = tasks.find((x) => x.id === id);
+    if (!task) return;
+    setTaskCompletion(id, task.status !== "Completed");
+  }, [tasks, setTaskCompletion]);
 
   const saveTask = useCallback((form: Task) => {
     setTasks((prev) => {
@@ -417,8 +443,15 @@ export function useAppData(user: User) {
   const deleteTask = useCallback((id: string) => {
     setTasks((prev) => prev.filter((x) => x.id !== id));
     db.deleteTask(id);
+    // A milestone linked to this task survives as a plain checklist item — unlink, don't cascade-delete it.
+    const owner = goals.find((g) => g.milestones.some((m) => m.taskId === id));
+    if (owner) {
+      const nextGoal = { ...owner, milestones: owner.milestones.map((m) => (m.taskId === id ? { ...m, taskId: null } : m)) };
+      setGoals((prev) => prev.map((g) => (g.id === owner.id ? nextGoal : g)));
+      db.upsertGoal(nextGoal, userId);
+    }
     setEditorTask(null);
-  }, []);
+  }, [goals, userId]);
 
   const moveDeadline = useCallback((id: string, dateStr: string) => {
     setTasks((prev) => prev.map((x) => {
@@ -433,7 +466,10 @@ export function useAppData(user: User) {
   const toggleMilestone = useCallback((goalId: string, mId: string) => {
     const g = goals.find((x) => x.id === goalId);
     if (!g) return;
-    const milestones = g.milestones.map((m) => (m.id === mId ? { ...m, done: !m.done } : m));
+    const target = g.milestones.find((x) => x.id === mId);
+    if (!target) return;
+    const newDone = !target.done;
+    const milestones = g.milestones.map((m) => (m.id === mId ? { ...m, done: newDone } : m));
     const justFinished = milestones.every((m) => m.done) && !g.milestones.every((m) => m.done);
     const nextGoal = { ...g, milestones };
     setGoals((prev) => prev.map((x) => (x.id === goalId ? nextGoal : x)));
@@ -442,7 +478,9 @@ export function useAppData(user: User) {
       fireConfetti();
       pushToast({ kind: "goal", title: "All milestones cleared", sub: g.name });
     }
-  }, [goals, fireConfetti, pushToast, userId]);
+    // Milestone is the source of truth here; sync the linked task without bouncing back.
+    if (target.taskId) setTaskCompletion(target.taskId, newDone, { syncMilestone: false });
+  }, [goals, fireConfetti, pushToast, userId, setTaskCompletion]);
 
   const saveProject = useCallback((form: Project) => {
     setProjects((prev) => {
@@ -488,13 +526,23 @@ export function useAppData(user: User) {
   }, [userId]);
 
   const saveGoal = useCallback((form: Goal) => {
+    // The milestone checklist inside the edit modal is local-only until Save, so any
+    // linked-milestone checkbox toggled there needs the same task sync applied here.
+    const prevGoal = goals.find((x) => x.id === form.id);
+    if (prevGoal) {
+      form.milestones.forEach((m) => {
+        if (!m.taskId) return;
+        const prevM = prevGoal.milestones.find((x) => x.id === m.id);
+        if (prevM && prevM.done !== m.done) setTaskCompletion(m.taskId!, m.done, { syncMilestone: false });
+      });
+    }
     setGoals((prev) => {
       const exists = prev.some((x) => x.id === form.id);
       db.upsertGoal(form, userId);
       return exists ? prev.map((x) => (x.id === form.id ? form : x)) : [...prev, form];
     });
     setEditorGoal(null);
-  }, [userId]);
+  }, [userId, goals, setTaskCompletion]);
 
   const deleteGoal = useCallback((id: string) => {
     setGoals((prev) => prev.filter((x) => x.id !== id));
