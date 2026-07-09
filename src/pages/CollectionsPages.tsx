@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import type { Category, Goal, Milestone, Project, Task } from "@/types";
 import type { AppData } from "@/hooks/useAppData";
-import { CheckButton, Dot, EmptyState, Field, Modal, ProgressBar, Ring, Switch } from "@/components/ui";
+import { CheckButton, CollapsibleSection, Dot, EmptyState, Field, Modal, ProgressBar, Ring, Switch } from "@/components/ui";
 import { daysAhead, shortDate, todayISO } from "@/utils/date";
 import { uid } from "@/utils/constants";
 
@@ -60,6 +60,55 @@ export function ProjectsPage({ app }: { app: AppData }) {
   const { projects, projectStats, categoriesById, goalsById, openNewProject, openEditProject, reorderProjects, loadSample } = app;
   const drag = useReorderDrag(reorderProjects);
 
+  const isDone = (p: Project) => (projectStats[p.id]?.pct ?? 0) === 100;
+  const activeProjects = projects.filter((p) => !isDone(p));
+  const doneProjects = projects.filter(isDone);
+
+  const renderCard = (p: Project) => {
+    const s = projectStats[p.id];
+    const cat = p.categoryId ? categoriesById[p.categoryId] : null;
+    const goal = p.goalId ? goalsById[p.goalId] : null;
+    return (
+      <div
+        key={p.id}
+        className="cm-card cm-card-hover p-5 flex flex-col gap-3 group"
+        style={drag.dragStyle(p.id)}
+        {...drag.targetProps(p.id)}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-start gap-2 min-w-0">
+            <DragHandle {...drag.handleProps(p.id)} />
+            <div className="min-w-0">
+              <div className="cm-display font-bold t-text truncate">{p.name}</div>
+              <div className="text-xs t-muted mt-1 flex items-center gap-1.5">
+                {cat && <><Dot color={cat.color} /> {cat.name}</>}
+                {goal && <span className="t-faint truncate">· {goal.name}</span>}
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              className="t-faint opacity-0 group-hover:opacity-100 transition-opacity hover:text-[var(--brand)]"
+              onClick={() => openEditProject(p)}
+              aria-label="Edit project"
+            >
+              <Pencil size={14} />
+            </button>
+            <span className="cm-display text-2xl font-extrabold" style={{ color: s.pct === 100 ? "var(--good)" : "var(--brand)" }}>
+              {s.pct}%
+            </span>
+          </div>
+        </div>
+        <ProgressBar value={s.pct} color={s.pct === 100 ? "#4E9B6E" : undefined} />
+        <div className="grid grid-cols-3 gap-2 text-center">
+          <div className="cm-inset py-2"><div className="text-sm font-bold t-text">{s.done}</div><div className="text-xs t-faint">done</div></div>
+          <div className="cm-inset py-2"><div className="text-sm font-bold t-text">{s.total - s.done}</div><div className="text-xs t-faint">remaining</div></div>
+          <div className="cm-inset py-2"><div className="text-sm font-bold t-text">{shortDate(s.eta)}</div><div className="text-xs t-faint">est. finish</div></div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="cm-page flex flex-col gap-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -69,50 +118,7 @@ export function ProjectsPage({ app }: { app: AppData }) {
       {projects.length > 1 && <div className="text-xs t-faint -mt-2">Drag the grip to reorder.</div>}
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 cm-stagger">
-        {projects.map((p) => {
-          const s = projectStats[p.id];
-          const cat = p.categoryId ? categoriesById[p.categoryId] : null;
-          const goal = p.goalId ? goalsById[p.goalId] : null;
-          return (
-            <div
-              key={p.id}
-              className="cm-card cm-card-hover p-5 flex flex-col gap-3 group"
-              style={drag.dragStyle(p.id)}
-              {...drag.targetProps(p.id)}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-start gap-2 min-w-0">
-                  <DragHandle {...drag.handleProps(p.id)} />
-                  <div className="min-w-0">
-                    <div className="cm-display font-bold t-text truncate">{p.name}</div>
-                    <div className="text-xs t-muted mt-1 flex items-center gap-1.5">
-                      {cat && <><Dot color={cat.color} /> {cat.name}</>}
-                      {goal && <span className="t-faint truncate">· {goal.name}</span>}
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    className="t-faint opacity-0 group-hover:opacity-100 transition-opacity hover:text-[var(--brand)]"
-                    onClick={() => openEditProject(p)}
-                    aria-label="Edit project"
-                  >
-                    <Pencil size={14} />
-                  </button>
-                  <span className="cm-display text-2xl font-extrabold" style={{ color: s.pct === 100 ? "var(--good)" : "var(--brand)" }}>
-                    {s.pct}%
-                  </span>
-                </div>
-              </div>
-              <ProgressBar value={s.pct} color={s.pct === 100 ? "#4E9B6E" : undefined} />
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div className="cm-inset py-2"><div className="text-sm font-bold t-text">{s.done}</div><div className="text-xs t-faint">done</div></div>
-                <div className="cm-inset py-2"><div className="text-sm font-bold t-text">{s.total - s.done}</div><div className="text-xs t-faint">remaining</div></div>
-                <div className="cm-inset py-2"><div className="text-sm font-bold t-text">{shortDate(s.eta)}</div><div className="text-xs t-faint">est. finish</div></div>
-              </div>
-            </div>
-          );
-        })}
+        {activeProjects.map(renderCard)}
       </div>
 
       {projects.length === 0 && (
@@ -128,6 +134,12 @@ export function ProjectsPage({ app }: { app: AppData }) {
           }
         />
       )}
+
+      <CollapsibleSection label="Completed" count={doneProjects.length}>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 cm-stagger">
+          {doneProjects.map(renderCard)}
+        </div>
+      </CollapsibleSection>
     </div>
   );
 }
@@ -196,6 +208,66 @@ export function GoalsPage({ app }: { app: AppData }) {
   const { goals, goalStats, toggleMilestone, openNewGoal, openEditGoal, reorderGoals, loadSample } = app;
   const drag = useReorderDrag(reorderGoals);
 
+  const isDone = (g: Goal) => (goalStats[g.id]?.pct ?? 0) === 100;
+  const activeGoals = goals.filter((g) => !isDone(g));
+  const doneGoals = goals.filter(isDone);
+
+  const renderCard = (g: Goal) => {
+    const s = goalStats[g.id];
+    return (
+      <div
+        key={g.id}
+        className="cm-card cm-card-hover p-5 flex flex-col gap-3 group"
+        style={drag.dragStyle(g.id)}
+        {...drag.targetProps(g.id)}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-2 min-w-0">
+            <DragHandle {...drag.handleProps(g.id)} />
+            <div className="min-w-0">
+              <div className="cm-display font-bold t-text flex items-center gap-2">
+                <Target size={16} className="t-brand shrink-0" /> {g.name}
+              </div>
+              <div className="text-sm t-muted mt-1">{g.description}</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              className="t-faint opacity-0 group-hover:opacity-100 transition-opacity hover:text-[var(--brand)]"
+              onClick={() => openEditGoal(g)}
+              aria-label="Edit goal"
+            >
+              <Pencil size={14} />
+            </button>
+            <Ring value={s.pct} size={72} stroke={7}>
+              <span className="text-sm font-bold t-text">{s.pct}%</span>
+            </Ring>
+          </div>
+        </div>
+        <ProgressBar value={s.pct} color={s.pct === 100 ? "#4E9B6E" : undefined} height={7} />
+        <div className="flex items-center gap-4 text-xs t-muted flex-wrap">
+          {g.targetDate && <span className="inline-flex items-center gap-1"><CalendarDays size={13} /> Target {shortDate(g.targetDate)}</span>}
+          <span className="inline-flex items-center gap-1"><Layers size={13} /> {s.projects} project{s.projects === 1 ? "" : "s"}</span>
+          <span className="inline-flex items-center gap-1"><CheckSquare size={13} /> {s.tasksDone}/{s.tasksTotal} tasks</span>
+        </div>
+        {g.milestones.length > 0 && (
+          <div>
+            <div className="text-xs font-semibold t-faint uppercase tracking-wide mb-1.5">Milestones</div>
+            <div className="flex flex-col gap-1.5">
+              {g.milestones.map((m) => (
+                <div key={m.id} className="flex items-center gap-2.5 text-sm">
+                  <CheckButton on={m.done} onClick={() => toggleMilestone(g.id, m.id)} title="Toggle milestone" />
+                  <span className={`t-text ${m.done ? "line-through opacity-50" : ""}`}>{m.title}</span>
+                  {m.taskId && <span title="Linked to a task"><Link2 size={12} className="t-faint shrink-0" /></span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="cm-page flex flex-col gap-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -205,61 +277,7 @@ export function GoalsPage({ app }: { app: AppData }) {
       {goals.length > 1 && <div className="text-xs t-faint -mt-2">Drag the grip to reorder.</div>}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 cm-stagger">
-        {goals.map((g) => {
-          const s = goalStats[g.id];
-          return (
-            <div
-              key={g.id}
-              className="cm-card cm-card-hover p-5 flex flex-col gap-3 group"
-              style={drag.dragStyle(g.id)}
-              {...drag.targetProps(g.id)}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-start gap-2 min-w-0">
-                  <DragHandle {...drag.handleProps(g.id)} />
-                  <div className="min-w-0">
-                    <div className="cm-display font-bold t-text flex items-center gap-2">
-                      <Target size={16} className="t-brand shrink-0" /> {g.name}
-                    </div>
-                    <div className="text-sm t-muted mt-1">{g.description}</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    className="t-faint opacity-0 group-hover:opacity-100 transition-opacity hover:text-[var(--brand)]"
-                    onClick={() => openEditGoal(g)}
-                    aria-label="Edit goal"
-                  >
-                    <Pencil size={14} />
-                  </button>
-                  <Ring value={s.pct} size={72} stroke={7}>
-                    <span className="text-sm font-bold t-text">{s.pct}%</span>
-                  </Ring>
-                </div>
-              </div>
-              <ProgressBar value={s.pct} color={s.pct === 100 ? "#4E9B6E" : undefined} height={7} />
-              <div className="flex items-center gap-4 text-xs t-muted flex-wrap">
-                {g.targetDate && <span className="inline-flex items-center gap-1"><CalendarDays size={13} /> Target {shortDate(g.targetDate)}</span>}
-                <span className="inline-flex items-center gap-1"><Layers size={13} /> {s.projects} project{s.projects === 1 ? "" : "s"}</span>
-                <span className="inline-flex items-center gap-1"><CheckSquare size={13} /> {s.tasksDone}/{s.tasksTotal} tasks</span>
-              </div>
-              {g.milestones.length > 0 && (
-                <div>
-                  <div className="text-xs font-semibold t-faint uppercase tracking-wide mb-1.5">Milestones</div>
-                  <div className="flex flex-col gap-1.5">
-                    {g.milestones.map((m) => (
-                      <div key={m.id} className="flex items-center gap-2.5 text-sm">
-                        <CheckButton on={m.done} onClick={() => toggleMilestone(g.id, m.id)} title="Toggle milestone" />
-                        <span className={`t-text ${m.done ? "line-through opacity-50" : ""}`}>{m.title}</span>
-                        {m.taskId && <span title="Linked to a task"><Link2 size={12} className="t-faint shrink-0" /></span>}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
+        {activeGoals.map(renderCard)}
       </div>
 
       {goals.length === 0 && (
@@ -275,6 +293,12 @@ export function GoalsPage({ app }: { app: AppData }) {
           }
         />
       )}
+
+      <CollapsibleSection label="Completed" count={doneGoals.length}>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 cm-stagger">
+          {doneGoals.map(renderCard)}
+        </div>
+      </CollapsibleSection>
     </div>
   );
 }

@@ -3,7 +3,7 @@ import React, { useMemo, useState } from "react";
 import { CheckSquare, Plus, Search } from "lucide-react";
 import type { AppData } from "@/hooks/useAppData";
 import { TaskRow } from "@/components/tasks";
-import { EmptyState } from "@/components/ui";
+import { CollapsibleSection, EmptyState } from "@/components/ui";
 import { addDays, todayISO } from "@/utils/date";
 import { DIFFICULTIES, PRIORITIES, STATUSES } from "@/utils/constants";
 
@@ -53,6 +53,12 @@ export function TasksPage({ app }: { app: AppData }) {
       });
   }, [tasks, quick, fPriority, fCategory, fProject, fGoal, fStatus, fDiff, q, today]);
 
+  // The "Completed" quick filter already asked for exactly the completed set —
+  // collapsing it there would hide the very thing that was filtered for.
+  const splitByCompletion = quick !== "Completed";
+  const activeTasks = splitByCompletion ? filtered.filter((t) => t.status !== "Completed") : filtered;
+  const doneTasks = splitByCompletion ? filtered.filter((t) => t.status === "Completed") : [];
+
   const sel = (
     v: string,
     set: (s: string) => void,
@@ -94,7 +100,7 @@ export function TasksPage({ app }: { app: AppData }) {
       </div>
 
       <div className="flex flex-col gap-2.5 cm-stagger">
-        {filtered.map((task) => <TaskRow key={task.id} task={task} app={app} />)}
+        {activeTasks.map((task) => <TaskRow key={task.id} task={task} app={app} />)}
         {filtered.length === 0 && tasks.length > 0 && (
           <EmptyState
             icon={<CheckSquare size={22} />}
@@ -117,6 +123,12 @@ export function TasksPage({ app }: { app: AppData }) {
           />
         )}
       </div>
+
+      <CollapsibleSection label="Completed" count={doneTasks.length}>
+        <div className="flex flex-col gap-2.5 cm-stagger">
+          {doneTasks.map((task) => <TaskRow key={task.id} task={task} app={app} />)}
+        </div>
+      </CollapsibleSection>
     </div>
   );
 }

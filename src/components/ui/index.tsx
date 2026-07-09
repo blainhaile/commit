@@ -2,7 +2,7 @@
    Small, reusable building blocks that define the design language:
    glass cards, metallic fills, calm motion.                            */
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { CalendarDays, Check, Sparkles, Target, Trophy, X, Zap } from "lucide-react";
+import { CalendarDays, Check, ChevronDown, ChevronRight, Sparkles, Target, Trophy, X, Zap } from "lucide-react";
 import type { Difficulty, Priority } from "@/types";
 import { DIFF_COLOR, PRIORITY_COLOR } from "@/utils/constants";
 import type { AppToast, ToastKind } from "@/hooks/useAppData";
@@ -265,6 +265,27 @@ export function EmptyState({ icon, title, blurb, action }: {
         <div className="text-sm t-muted mt-1 max-w-sm">{blurb}</div>
       </div>
       {action}
+    </div>
+  );
+}
+
+/* ---------- Collapsible section (e.g. a "Completed" bucket) ---------- */
+export function CollapsibleSection({ label, count, defaultOpen = false, children }: {
+  label: string; count: number; defaultOpen?: boolean; children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  if (count === 0) return null;
+  return (
+    <div className="flex flex-col gap-3" style={{ borderTop: "1px solid var(--border)", paddingTop: 14, marginTop: 2 }}>
+      <button
+        className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide t-faint hover:text-[var(--brand)] transition-colors self-start"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
+        {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        {label} ({count})
+      </button>
+      {open && children}
     </div>
   );
 }
