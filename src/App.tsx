@@ -14,7 +14,9 @@ import { LoginPage } from "@/pages/LoginPage";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { TasksPage } from "@/pages/TasksPage";
 import { CalendarPage } from "@/pages/CalendarPage";
-import { CategoriesPage, GoalsPage, ProjectsPage } from "@/pages/CollectionsPages";
+import {
+  CategoriesPage, CategoryModal, GoalModal, GoalsPage, ProjectModal, ProjectsPage,
+} from "@/pages/CollectionsPages";
 import { AnalyticsPage, LockedPage, SettingsPage } from "@/pages/SystemPages";
 import { APP_NAME, APP_TAGLINE } from "@/utils/constants";
 
@@ -152,6 +154,9 @@ function Shell({ user, onSignOut }: { user: User; onSignOut: () => Promise<void>
       </button>
 
       {app.editorTask !== null && <TaskModal key={app.editorTask.id ?? "new"} app={app} />}
+      {app.editorProject !== null && <ProjectModal key={app.editorProject.id ?? "new"} app={app} />}
+      {app.editorGoal !== null && <GoalModal key={app.editorGoal.id ?? "new"} app={app} />}
+      {app.editorCategory !== null && <CategoryModal key={app.editorCategory.id ?? "new"} app={app} />}
     </div>
   );
 }

@@ -38,6 +38,9 @@ export function useAppData(user: User) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [editorTask, setEditorTask] = useState<Partial<Task> | null>(null);
+  const [editorProject, setEditorProject] = useState<Partial<Project> | null>(null);
+  const [editorGoal, setEditorGoal] = useState<Partial<Goal> | null>(null);
+  const [editorCategory, setEditorCategory] = useState<Partial<Category> | null>(null);
   const [toasts, setToasts] = useState<AppToast[]>([]);
   const [burst, setBurst] = useState(0);
 
@@ -396,23 +399,58 @@ export function useAppData(user: User) {
     }
   }, [goals, fireConfetti, pushToast, userId]);
 
-  const addProject = useCallback((p: Partial<Project> & Pick<Project, "name">) => {
-    const proj: Project = { goalId: null, description: "", categoryId: null, targetDate: null, ...p, id: p.id ?? uid("proj") };
-    setProjects((prev) => [...prev, proj]);
-    db.upsertProject(proj, userId);
+  const saveProject = useCallback((form: Project) => {
+    setProjects((prev) => {
+      const exists = prev.some((x) => x.id === form.id);
+      db.upsertProject(form, userId);
+      return exists ? prev.map((x) => (x.id === form.id ? form : x)) : [...prev, form];
+    });
+    setEditorProject(null);
   }, [userId]);
 
-  const addGoal = useCallback((g: Partial<Goal> & Pick<Goal, "name">) => {
-    const goal: Goal = { milestones: [], description: "", categoryId: null, targetDate: null, ...g, id: g.id ?? uid("goal") };
-    setGoals((prev) => [...prev, goal]);
-    db.upsertGoal(goal, userId);
+  const deleteProject = useCallback((id: string) => {
+    const proj = projects.find((x) => x.id === id);
+    // A project's linked goal is deleted alongside it, unless another surviving
+    // project still points at that same goal (shared goals are left intact).
+    const goalStillShared = Boolean(proj?.goalId) && projects.some((p) => p.id !== id && p.goalId === proj!.goalId);
+    setProjects((prev) => prev.filter((x) => x.id !== id));
+    db.deleteProject(id);
+    if (proj?.goalId && !goalStillShared) {
+      setGoals((prev) => prev.filter((x) => x.id !== proj.goalId));
+      db.deleteGoal(proj.goalId);
+    }
+    setEditorProject(null);
+  }, [projects]);
+
+  const saveGoal = useCallback((form: Goal) => {
+    setGoals((prev) => {
+      const exists = prev.some((x) => x.id === form.id);
+      db.upsertGoal(form, userId);
+      return exists ? prev.map((x) => (x.id === form.id ? form : x)) : [...prev, form];
+    });
+    setEditorGoal(null);
   }, [userId]);
 
-  const addCategory = useCallback((c: Omit<Category, "id">) => {
-    const cat: Category = { ...c, id: uid("cat") };
-    setCategories((prev) => [...prev, cat]);
-    db.upsertCategory(cat, userId);
+  const deleteGoal = useCallback((id: string) => {
+    setGoals((prev) => prev.filter((x) => x.id !== id));
+    db.deleteGoal(id);
+    setEditorGoal(null);
+  }, []);
+
+  const saveCategory = useCallback((form: Category) => {
+    setCategories((prev) => {
+      const exists = prev.some((x) => x.id === form.id);
+      db.upsertCategory(form, userId);
+      return exists ? prev.map((x) => (x.id === form.id ? form : x)) : [...prev, form];
+    });
+    setEditorCategory(null);
   }, [userId]);
+
+  const deleteCategory = useCallback((id: string) => {
+    setCategories((prev) => prev.filter((x) => x.id !== id));
+    db.deleteCategory(id);
+    setEditorCategory(null);
+  }, []);
 
   const loadSample = useCallback(async () => {
     setCategories(seedCategories);
@@ -433,6 +471,18 @@ export function useAppData(user: User) {
   const openEditTask = useCallback((task: Task) => setEditorTask(task), []);
   const closeEditor = useCallback(() => setEditorTask(null), []);
 
+  const openNewProject = useCallback(() => setEditorProject({}), []);
+  const openEditProject = useCallback((p: Project) => setEditorProject(p), []);
+  const closeProjectEditor = useCallback(() => setEditorProject(null), []);
+
+  const openNewGoal = useCallback(() => setEditorGoal({}), []);
+  const openEditGoal = useCallback((g: Goal) => setEditorGoal(g), []);
+  const closeGoalEditor = useCallback(() => setEditorGoal(null), []);
+
+  const openNewCategory = useCallback(() => setEditorCategory({}), []);
+  const openEditCategory = useCallback((c: Category) => setEditorCategory(c), []);
+  const closeCategoryEditor = useCallback(() => setEditorCategory(null), []);
+
   return {
     booted, loadError, user,
     tasks, projects, goals, categories, categoriesById, projectsById, goalsById,
@@ -442,8 +492,11 @@ export function useAppData(user: User) {
     focusTasks, upcoming, recentDone, weeklyData, monthlyData, weekDelta,
     projectStats, categoryStats, goalStats, analytics,
     toggleComplete, saveTask, deleteTask, moveDeadline, toggleMilestone,
-    addProject, addGoal, addCategory, loadSample,
+    saveProject, deleteProject, saveGoal, deleteGoal, saveCategory, deleteCategory, loadSample,
     editorTask, openNewTask, openNewTaskOn, openEditTask, closeEditor,
+    editorProject, openNewProject, openEditProject, closeProjectEditor,
+    editorGoal, openNewGoal, openEditGoal, closeGoalEditor,
+    editorCategory, openNewCategory, openEditCategory, closeCategoryEditor,
   };
 }
 
