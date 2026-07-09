@@ -507,6 +507,63 @@ export function useAppData(user: User) {
     if (target.taskId) setTaskCompletion(target.taskId, newDone, { syncMilestone: false });
   }, [goals, fireConfetti, pushToast, userId, setTaskCompletion]);
 
+  /** Drag-and-drop reorder within one goal's milestone list. Milestones live in a
+   *  jsonb array (goal.milestones) — order is just array order, no per-item index
+   *  field, so reordering is a plain splice-and-persist like reorderProjects etc. */
+  const reorderMilestones = useCallback((goalId: string, draggedId: string, dropId: string) => {
+    if (draggedId === dropId) return;
+    setGoals((prev) => prev.map((g) => {
+      if (g.id !== goalId) return g;
+      const from = g.milestones.findIndex((m) => m.id === draggedId);
+      const to = g.milestones.findIndex((m) => m.id === dropId);
+      if (from === -1 || to === -1) return g;
+      const next = [...g.milestones];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      const nextGoal = { ...g, milestones: next };
+      db.upsertGoal(nextGoal, userId);
+      return nextGoal;
+    }));
+  }, [userId]);
+
+  /** Removes any milestone.taskId (in any goal) that points at this task and doesn't
+   *  belong to `keepGoalId` — called whenever a task's goalId changes via search-link
+   *  so a milestone never displays a stale "linked to a task" badge for a task that
+   *  no longer actually belongs to that goal. */
+  const clearStaleMilestoneLinks = useCallback((taskId: string, keepGoalId: string | null) => {
+    goals.forEach((g) => {
+      if (g.id === keepGoalId) return;
+      const m = g.milestones.find((x) => x.taskId === taskId);
+      if (!m) return;
+      const nextGoal = { ...g, milestones: g.milestones.map((x) => (x.id === m.id ? { ...x, taskId: null } : x)) };
+      setGoals((prev) => prev.map((x) => (x.id === g.id ? nextGoal : x)));
+      db.upsertGoal(nextGoal, userId);
+    });
+  }, [goals, userId]);
+
+  /** Links an already-existing task to a goal by setting its goalId — independent of
+   *  milestones; never creates a task or a milestone. */
+  const linkTaskToGoal = useCallback((taskId: string, goalId: string) => {
+    setTasks((prev) => prev.map((t) => {
+      if (t.id !== taskId) return t;
+      const updated = { ...t, goalId };
+      db.upsertTask(updated, userId);
+      return updated;
+    }));
+    clearStaleMilestoneLinks(taskId, goalId);
+  }, [userId, clearStaleMilestoneLinks]);
+
+  const unlinkTaskFromGoal = useCallback((taskId: string) => {
+    setTasks((prev) => prev.map((t) => {
+      if (t.id !== taskId) return t;
+      const updated = { ...t, goalId: null };
+      db.upsertTask(updated, userId);
+      return updated;
+    }));
+    // No goal to keep — clears any milestone anywhere still pointing at this task.
+    clearStaleMilestoneLinks(taskId, null);
+  }, [userId, clearStaleMilestoneLinks]);
+
   const saveProject = useCallback((form: Project) => {
     setProjects((prev) => {
       const exists = prev.some((x) => x.id === form.id);
@@ -715,7 +772,9 @@ export function useAppData(user: User) {
     todayDone, todayTotal, todayPct, streak, longestStreak, xpToday, totalXP, level,
     focusTasks, upcoming, recentDone, weeklyData, monthlyData, weekDelta,
     projectStats, categoryStats, goalStats, analytics,
-    toggleComplete, saveTask, deleteTask, moveDeadline, toggleMilestone, toggleSubtask, addSubtask, removeSubtask,
+    toggleComplete, saveTask, deleteTask, moveDeadline, toggleMilestone, reorderMilestones,
+    linkTaskToGoal, unlinkTaskFromGoal,
+    toggleSubtask, addSubtask, removeSubtask,
     saveProject, deleteProject, reorderProjects, saveGoal, deleteGoal, reorderGoals,
     saveCategory, deleteCategory, reorderCategories, loadSample,
     saveHabit, deleteHabit, logHabitCompletion,

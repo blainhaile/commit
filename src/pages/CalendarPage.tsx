@@ -1,13 +1,17 @@
 /* ── Commit · Calendar ──────────────────────────────────────────────── */
 import React, { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { CalendarRange, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import type { AppData } from "@/hooks/useAppData";
 import type { Task } from "@/types";
 import { TaskRow } from "@/components/tasks";
-import { formatTime, iso, parseISO, shortDate, todayISO, weekday } from "@/utils/date";
+import { addDays, DAY_MS, formatTime, iso, parseISO, shortDate, todayISO, weekday } from "@/utils/date";
 
 const VIEWS = ["Month", "Week", "Day", "Agenda"] as const;
 type View = (typeof VIEWS)[number];
+
+/** One task's appearance on one specific day. `segment` locates that day within a
+ *  multi-day span (start/deadline both set); "single" is today's default one-day case. */
+type DayTaskEntry = { task: Task; segment: "single" | "start" | "middle" | "end"; dayIndex: number; totalDays: number };
 
 export function CalendarPage({ app }: { app: AppData }) {
   const { tasks, categoriesById, openEditTask, openNewTaskOn, moveDeadline } = app;
@@ -17,15 +21,29 @@ export function CalendarPage({ app }: { app: AppData }) {
   const today = todayISO();
 
   const tasksByDay = useMemo(() => {
-    const map: Record<string, Task[]> = {};
+    const map: Record<string, DayTaskEntry[]> = {};
     tasks.forEach((task) => {
       if (!task.deadline || task.status === "Archived") return;
-      (map[task.deadline] = map[task.deadline] || []).push(task);
+      const isRange = Boolean(task.startDate) && task.startDate! < task.deadline;
+      if (!isRange) {
+        (map[task.deadline] = map[task.deadline] || []).push({ task, segment: "single", dayIndex: 1, totalDays: 1 });
+        return;
+      }
+      const totalDays = Math.round((parseISO(task.deadline).getTime() - parseISO(task.startDate!).getTime()) / DAY_MS) + 1;
+      let d = task.startDate!;
+      let dayIndex = 1;
+      while (d <= task.deadline) {
+        const segment = d === task.startDate ? "start" : d === task.deadline ? "end" : "middle";
+        (map[d] = map[d] || []).push({ task, segment, dayIndex, totalDays });
+        d = addDays(d, 1);
+        dayIndex += 1;
+      }
     });
-    // Untimed tasks first (all-day style), then timed tasks in ascending order —
-    // "" sorts before any "HH:mm" string, so a plain compare does both at once.
+    // Untimed and multi-day (all-day style) entries first, then single-day timed
+    // tasks in ascending order — "" sorts before any "HH:mm" string.
     Object.values(map).forEach((list) => list.sort((a, b) => {
-      const at = a.deadlineTime || "", bt = b.deadlineTime || "";
+      const at = a.segment === "single" ? (a.task.deadlineTime || "") : "";
+      const bt = b.segment === "single" ? (b.task.deadlineTime || "") : "";
       return at < bt ? -1 : at > bt ? 1 : 0;
     }));
     return map;
@@ -66,21 +84,26 @@ export function CalendarPage({ app }: { app: AppData }) {
       >
         <div className={`text-xs font-semibold px-1 ${isToday ? "t-brand" : "t-muted"}`}>{parseISO(dateStr).getDate()}</div>
         <div className="flex flex-col gap-1 overflow-hidden">
-          {dayTasks.slice(0, tall ? 12 : 3).map((task) => {
+          {dayTasks.slice(0, tall ? 12 : 3).map(({ task, segment }) => {
             const cat = task.categoryId ? categoriesById[task.categoryId] : null;
             const isDone = task.status === "Completed";
             const c = cat?.color || "#8697C4";
+            // Only the deadline-day chip (single or the range's end segment) actually
+            // moves the deadline on drop, so only that one is draggable — dragging a
+            // start/middle segment would confusingly move the END of the span, not itself.
+            const draggableHere = segment === "single" || segment === "end";
+            const roundingClass = segment === "single" ? "rounded-md" : segment === "start" ? "rounded-l-md" : segment === "end" ? "rounded-r-md" : "";
             return (
               <div
                 key={task.id}
-                draggable
-                onDragStart={(e) => e.dataTransfer.setData("text/task", task.id)}
+                draggable={draggableHere}
+                onDragStart={draggableHere ? (e) => e.dataTransfer.setData("text/task", task.id) : undefined}
                 onClick={(e) => { e.stopPropagation(); openEditTask(task); }}
-                className={`text-xs px-1.5 py-1 rounded-md truncate cursor-grab active:cursor-grabbing transition-transform hover:-translate-y-px ${isDone ? "line-through opacity-50" : ""}`}
+                className={`text-xs px-1.5 py-1 ${roundingClass} truncate transition-transform hover:-translate-y-px ${draggableHere ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"} ${isDone ? "line-through opacity-50" : ""}`}
                 style={{ background: `${c}1C`, color: c, fontWeight: 600, border: `1px solid ${c}30` }}
-                title={`${task.title} — drag to move deadline`}
+                title={draggableHere ? `${task.title} — drag to move deadline` : `${task.title} — spans ${shortDate(task.startDate!)}–${shortDate(task.deadline!)}`}
               >
-                {task.deadlineTime && <span style={{ opacity: 0.7 }}>{formatTime(task.deadlineTime)} </span>}{task.title}
+                {task.deadlineTime && draggableHere && <span style={{ opacity: 0.7 }}>{formatTime(task.deadlineTime)} </span>}{task.title}
               </div>
             );
           })}
@@ -141,7 +164,16 @@ export function CalendarPage({ app }: { app: AppData }) {
         <div className="text-sm t-muted font-medium">
           {anchor.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}
         </div>
-        {dayTasks.map((task) => <TaskRow key={task.id} task={task} app={app} />)}
+        {dayTasks.map(({ task, segment, dayIndex, totalDays }) => (
+          <div key={task.id} className="flex flex-col gap-1">
+            {segment !== "single" && (
+              <div className="text-xs t-faint px-1 inline-flex items-center gap-1">
+                <CalendarRange size={11} /> Day {dayIndex} of {totalDays}
+              </div>
+            )}
+            <TaskRow task={task} app={app} />
+          </div>
+        ))}
         {dayTasks.length === 0 && (
           <div className="cm-inset p-8 text-center text-sm t-muted">Nothing scheduled. Click below to add something.</div>
         )}
@@ -151,16 +183,16 @@ export function CalendarPage({ app }: { app: AppData }) {
       </div>
     );
   } else {
-    const list = tasks
-      .filter((x) => x.deadline && x.deadline >= today && x.status !== "Archived")
-      .sort((a, b) => {
-        if (a.deadline !== b.deadline) return a.deadline! < b.deadline! ? -1 : 1;
-        const at = a.deadlineTime || "", bt = b.deadlineTime || "";
-        return at < bt ? -1 : at > bt ? 1 : 0;
-      })
-      .slice(0, 30);
-    const groups: Record<string, Task[]> = {};
-    list.forEach((x) => (groups[x.deadline!] = groups[x.deadline!] || []).push(x));
+    // Built from tasksByDay (not a fresh filter over `tasks`) so a multi-day task's
+    // start/middle/end segments all show up here too, already sorted per day.
+    const upcomingDays = Object.keys(tasksByDay).filter((d) => d >= today).sort();
+    const groups: Record<string, DayTaskEntry[]> = {};
+    let shown = 0;
+    for (const d of upcomingDays) {
+      if (shown >= 30) break;
+      groups[d] = tasksByDay[d];
+      shown += tasksByDay[d].length;
+    }
     body = (
       <div className="flex flex-col gap-4">
         {Object.entries(groups).map(([d, group]) => (
@@ -169,11 +201,20 @@ export function CalendarPage({ app }: { app: AppData }) {
               {weekday(d)} · {shortDate(d)} {d === today ? "· Today" : ""}
             </div>
             <div className="flex flex-col gap-2">
-              {group.map((task) => <TaskRow key={task.id} task={task} app={app} compact />)}
+              {group.map(({ task, segment, dayIndex, totalDays }) => (
+                <div key={task.id} className="flex flex-col gap-1">
+                  {segment !== "single" && (
+                    <div className="text-xs t-faint px-1 inline-flex items-center gap-1">
+                      <CalendarRange size={11} /> Day {dayIndex} of {totalDays}
+                    </div>
+                  )}
+                  <TaskRow task={task} app={app} compact />
+                </div>
+              ))}
             </div>
           </div>
         ))}
-        {list.length === 0 && <div className="text-sm t-muted">Nothing on the horizon.</div>}
+        {upcomingDays.length === 0 && <div className="text-sm t-muted">Nothing on the horizon.</div>}
       </div>
     );
   }

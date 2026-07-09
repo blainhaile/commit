@@ -1,7 +1,7 @@
 /* ── Commit · Projects, Goals, Categories ───────────────────────────── */
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
-  CalendarDays, CheckSquare, FolderKanban, GripVertical, Layers, Link2, Pencil, Plus, Tag, Target,
+  CalendarDays, CheckSquare, FolderKanban, GripVertical, Layers, Link2, Pencil, Plus, Search, Tag, Target,
   TrendingDown, TrendingUp, Trash2, X,
 } from "lucide-react";
 import type { Category, Goal, Milestone, Project, Task } from "@/types";
@@ -205,8 +205,16 @@ export function ProjectModal({ app }: { app: AppData }) {
 
 /* ════════ Goals ════════ */
 export function GoalsPage({ app }: { app: AppData }) {
-  const { goals, goalStats, toggleMilestone, openNewGoal, openEditGoal, reorderGoals, loadSample } = app;
+  const { goals, goalStats, toggleMilestone, reorderMilestones, openNewGoal, openEditGoal, reorderGoals, loadSample } = app;
   const drag = useReorderDrag(reorderGoals);
+  // Composite "goalId::milestoneId" keys, since renderCard runs inside a .map() and
+  // can't call its own hook per goal — one shared drag state, scoped per goal at drop time.
+  const milestoneDrag = useReorderDrag((draggedKey, dropKey) => {
+    const [dGoal, dMs] = draggedKey.split("::");
+    const [tGoal, tMs] = dropKey.split("::");
+    if (dGoal !== tGoal) return;
+    reorderMilestones(dGoal, dMs, tMs);
+  });
 
   const isDone = (g: Goal) => (goalStats[g.id]?.pct ?? 0) === 100;
   const activeGoals = goals.filter((g) => !isDone(g));
@@ -255,7 +263,13 @@ export function GoalsPage({ app }: { app: AppData }) {
             <div className="text-xs font-semibold t-faint uppercase tracking-wide mb-1.5">Milestones</div>
             <div className="flex flex-col gap-1.5">
               {g.milestones.map((m) => (
-                <div key={m.id} className="flex items-center gap-2.5 text-sm">
+                <div
+                  key={m.id}
+                  className="flex items-center gap-2.5 text-sm"
+                  style={milestoneDrag.dragStyle(`${g.id}::${m.id}`)}
+                  {...milestoneDrag.targetProps(`${g.id}::${m.id}`)}
+                >
+                  <DragHandle {...milestoneDrag.handleProps(`${g.id}::${m.id}`)} />
                   <CheckButton on={m.done} onClick={() => toggleMilestone(g.id, m.id)} title="Toggle milestone" />
                   <span className={`t-text ${m.done ? "line-through opacity-50" : ""}`}>{m.title}</span>
                   {m.taskId && <span title="Linked to a task"><Link2 size={12} className="t-faint shrink-0" /></span>}
@@ -334,11 +348,15 @@ function taskFromMilestone(goal: Goal, title: string, projectId: string | null):
 }
 
 export function GoalModal({ app }: { app: AppData }) {
-  const { editorGoal, categories, projects, saveGoal, saveTask, closeGoalEditor, deleteGoal } = app;
+  const {
+    editorGoal, categories, projects, tasks, goalsById, saveGoal, saveTask, closeGoalEditor, deleteGoal,
+    linkTaskToGoal, unlinkTaskFromGoal,
+  } = app;
   const initial = editorGoal!;
   const [form, setForm] = useState<Goal>(() => ({ ...blankGoal(), ...initial }));
   const [mTitle, setMTitle] = useState("");
   const [createTask, setCreateTask] = useState(false);
+  const [taskQuery, setTaskQuery] = useState("");
   const [mProjectId, setMProjectId] = useState<string | null>(null);
   // Tasks spun off from "also create as a task" milestones, keyed by their (not-yet-
   // persisted) task id. Only written to Supabase once the goal itself is saved, so
@@ -347,6 +365,30 @@ export function GoalModal({ app }: { app: AppData }) {
   const set = <K extends keyof Goal>(k: K, v: Goal[K]) => setForm((f) => ({ ...f, [k]: v }));
 
   const linkedProjects = projects.filter((p) => p.goalId === form.id);
+
+  // Only meaningful for an already-saved goal — a brand-new goal's id isn't real yet,
+  // so linking a real task to it here could orphan the link if the goal is never saved.
+  const isExistingGoal = Boolean(initial?.id);
+  const linkedTasks = useMemo(() => tasks.filter((t) => t.goalId === form.id), [tasks, form.id]);
+  const taskResults = useMemo(() => {
+    if (!isExistingGoal || !taskQuery.trim()) return null;
+    const needle = taskQuery.toLowerCase();
+    return tasks
+      .filter((t) => t.goalId !== form.id && t.title.toLowerCase().includes(needle))
+      .slice(0, 8);
+  }, [tasks, taskQuery, form.id, isExistingGoal]);
+
+  const reorderFormMilestones = (draggedId: string, dropId: string) => {
+    if (draggedId === dropId) return;
+    const from = form.milestones.findIndex((m) => m.id === draggedId);
+    const to = form.milestones.findIndex((m) => m.id === dropId);
+    if (from === -1 || to === -1) return;
+    const next = [...form.milestones];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    set("milestones", next);
+  };
+  const milestoneDrag = useReorderDrag(reorderFormMilestones);
 
   const addMilestone = () => {
     if (!mTitle.trim()) return;
@@ -416,7 +458,13 @@ export function GoalModal({ app }: { app: AppData }) {
           <span className="block text-xs font-semibold t-faint mb-1.5 uppercase tracking-wide">Milestones</span>
           <div className="flex flex-col gap-1.5 mb-2">
             {form.milestones.map((m) => (
-              <div key={m.id} className="cm-inset flex items-center gap-2.5 text-sm px-3 py-2">
+              <div
+                key={m.id}
+                className="cm-inset flex items-center gap-2.5 text-sm px-3 py-2 group"
+                style={milestoneDrag.dragStyle(m.id)}
+                {...milestoneDrag.targetProps(m.id)}
+              >
+                <DragHandle {...milestoneDrag.handleProps(m.id)} />
                 <CheckButton on={m.done} onClick={() => toggleFormMilestone(m)} />
                 <span className={`t-text ${m.done ? "line-through opacity-50" : ""}`}>{m.title}</span>
                 {m.taskId && <span title="Linked to a task"><Link2 size={12} className="t-faint shrink-0" /></span>}
@@ -453,6 +501,62 @@ export function GoalModal({ app }: { app: AppData }) {
             )}
           </div>
         </div>
+
+        {isExistingGoal && (
+          <div>
+            <span className="block text-xs font-semibold t-faint mb-1.5 uppercase tracking-wide">Linked tasks</span>
+            <div className="flex flex-col gap-1.5 mb-2">
+              {linkedTasks.map((t) => (
+                <div key={t.id} className="cm-inset flex items-center gap-2.5 text-sm px-3 py-2">
+                  <CheckSquare size={14} className="t-faint shrink-0" />
+                  <span className={`t-text truncate ${t.status === "Completed" ? "line-through opacity-50" : ""}`}>{t.title}</span>
+                  <button
+                    className="ml-auto t-faint hover:text-[var(--bad)] transition-colors shrink-0"
+                    onClick={() => unlinkTaskFromGoal(t.id)}
+                    aria-label="Unlink task"
+                    title="Unlink task"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ))}
+              {linkedTasks.length === 0 && <div className="text-xs t-faint px-1">No tasks linked yet — this is separate from milestones.</div>}
+            </div>
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 t-faint" />
+              <input
+                className="cm-input"
+                style={{ paddingLeft: 30 }}
+                placeholder="Search existing tasks to link…"
+                value={taskQuery}
+                onChange={(e) => setTaskQuery(e.target.value)}
+              />
+              {taskResults && (
+                <div
+                  className="absolute left-0 right-0 mt-2 cm-card p-2 flex flex-col gap-0.5 max-h-56 overflow-y-auto cm-scroll"
+                  style={{ zIndex: 20, background: "var(--panel-strong)" }}
+                >
+                  {taskResults.map((t) => {
+                    const elsewhere = t.goalId ? goalsById[t.goalId] : null;
+                    return (
+                      <button
+                        key={t.id}
+                        className="text-left px-3 py-2 rounded-lg hover:bg-[var(--brand-softer)] flex items-center gap-2 transition-colors"
+                        onClick={() => { linkTaskToGoal(t.id, form.id); setTaskQuery(""); }}
+                      >
+                        <CheckSquare size={14} className="t-brand shrink-0" />
+                        <span className="text-sm t-text truncate">{t.title}</span>
+                        {elsewhere && <span className="text-xs t-faint ml-auto shrink-0 truncate max-w-[140px]">moves from {elsewhere.name}</span>}
+                      </button>
+                    );
+                  })}
+                  {taskResults.length === 0 && <div className="text-sm t-muted px-3 py-2">No matches.</div>}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center gap-3 mt-2">
           <button className="cm-btn cm-btn-primary" onClick={save} disabled={!form.name.trim()}>
             {initial?.id ? "Save changes" : "Create goal"}
