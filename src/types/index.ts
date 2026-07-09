@@ -97,3 +97,40 @@ export interface Toast {
   sub?: string;
   icon?: React.ReactNode;
 }
+
+/* ── Habits ──────────────────────────────────────────────────────────── */
+export type HabitFrequencyType = "Daily" | "Weekly";
+export type HabitStatus = "Completed" | "Partial" | "Missed";
+
+export interface StreakMultiplierTier {
+  days: number;       // streak length threshold, e.g. 7
+  multiplier: number; // e.g. 1.1 — stored now, applied starting Phase 2
+}
+
+export interface Habit {
+  id: string;
+  name: string;
+  categoryId: string | null;
+  description: string;
+  frequencyType: HabitFrequencyType;
+  targetDaysPerWeek: number | null; // only meaningful when frequencyType === "Weekly"
+  goalAmount: number;
+  measurementUnit: string;          // "minutes" | "count" | "hours" | "pages" …
+  xpReward: number;
+  difficulty: Difficulty;
+  streakMultipliers: StreakMultiplierTier[];
+  startDate: string;  // YYYY-MM-DD
+  active: boolean;
+  createdAt: string;  // YYYY-MM-DD
+}
+
+export interface HabitCompletion {
+  id: string;
+  habitId: string;
+  date: string;       // YYYY-MM-DD
+  status: HabitStatus;
+  amount: number;
+  notes: string;
+  xpEarned: number;
+  createdAt: string;  // YYYY-MM-DDTHH:mm:ss
+}

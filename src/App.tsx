@@ -2,7 +2,7 @@
    Auth gate → data boot → shell (sidebar / topbar / pages / modals).   */
 import React, { useEffect, useState } from "react";
 import type { User } from "@supabase/supabase-js";
-import { PiggyBank, Plus, Repeat } from "lucide-react";
+import { PiggyBank, Plus } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useAppData } from "@/hooks/useAppData";
 import { NAV, type Page } from "@/components/layout/nav";
@@ -10,6 +10,7 @@ import { Sidebar, Topbar } from "@/components/layout";
 import { CommitMark } from "@/components/layout/CommitMark";
 import { Confetti, SkeletonCard, Spinner, Toasts } from "@/components/ui";
 import { TaskModal } from "@/components/tasks";
+import { HabitModal } from "@/components/habits";
 import { LoginPage } from "@/pages/LoginPage";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { TasksPage } from "@/pages/TasksPage";
@@ -17,6 +18,7 @@ import { CalendarPage } from "@/pages/CalendarPage";
 import {
   CategoriesPage, CategoryModal, GoalModal, GoalsPage, ProjectModal, ProjectsPage,
 } from "@/pages/CollectionsPages";
+import { HabitsPage } from "@/pages/HabitsPage";
 import { AnalyticsPage, LockedPage, SettingsPage } from "@/pages/SystemPages";
 import { APP_NAME, APP_TAGLINE } from "@/utils/constants";
 
@@ -92,13 +94,7 @@ function Shell({ user, onSignOut }: { user: User; onSignOut: () => Promise<void>
     categories: <CategoriesPage app={app} />,
     analytics: <AnalyticsPage app={app} />,
     settings: <SettingsPage app={app} onSignOut={onSignOut} />,
-    habits: (
-      <LockedPage
-        title="Habits"
-        icon={<Repeat size={28} />}
-        blurb="Daily habit chains with their own streaks and XP multipliers. The task engine underneath is ready — this view ships next."
-      />
-    ),
+    habits: <HabitsPage app={app} />,
     savings: (
       <LockedPage
         title="Savings Tracker"
@@ -157,6 +153,7 @@ function Shell({ user, onSignOut }: { user: User; onSignOut: () => Promise<void>
       {app.editorProject !== null && <ProjectModal key={app.editorProject.id ?? "new"} app={app} />}
       {app.editorGoal !== null && <GoalModal key={app.editorGoal.id ?? "new"} app={app} />}
       {app.editorCategory !== null && <CategoryModal key={app.editorCategory.id ?? "new"} app={app} />}
+      {app.editorHabit !== null && <HabitModal key={app.editorHabit.id ?? "new"} app={app} />}
     </div>
   );
 }

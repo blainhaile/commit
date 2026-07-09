@@ -69,25 +69,64 @@ create table if not exists public.settings (
   updated_at timestamptz not null default now()
 );
 
+-- ── Habits ──────────────────────────────────────────────────────────
+create table if not exists public.habits (
+  id                    text primary key,
+  user_id               uuid not null references auth.users (id) on delete cascade,
+  name                  text not null,
+  category_id           text,
+  description           text not null default '',
+  frequency_type        text not null default 'Daily',   -- Daily|Weekly
+  target_days_per_week  integer,                          -- set only when frequency_type = 'Weekly'
+  goal_amount           numeric not null default 1,
+  measurement_unit      text not null default 'count',    -- minutes|count|hours|pages…
+  xp_reward             integer not null default 10,
+  difficulty            text not null default 'Medium',   -- Easy|Medium|Hard|Epic
+  streak_multipliers    jsonb not null default
+    '[{"days":7,"multiplier":1.1},{"days":30,"multiplier":1.25},{"days":90,"multiplier":1.5},{"days":365,"multiplier":2}]'::jsonb,
+  start_date            date not null default current_date,
+  active                boolean not null default true,
+  created_at            timestamptz not null default now()
+);
+
+-- ── Habit completions (one row per habit per day) ────────────────────
+create table if not exists public.habit_completions (
+  id          text primary key,
+  user_id     uuid not null references auth.users (id) on delete cascade,
+  habit_id    text not null references public.habits (id) on delete cascade,
+  date        date not null,
+  status      text not null default 'Completed',  -- Completed|Partial|Missed
+  amount      numeric not null default 0,
+  notes       text not null default '',
+  xp_earned   integer not null default 0,
+  created_at  timestamptz not null default now(),
+  unique (habit_id, date)
+);
+
 -- ── Indexes ─────────────────────────────────────────────────────────
-create index if not exists tasks_user_idx      on public.tasks (user_id);
-create index if not exists tasks_deadline_idx  on public.tasks (user_id, deadline);
-create index if not exists tasks_status_idx    on public.tasks (user_id, status);
-create index if not exists projects_user_idx   on public.projects (user_id);
-create index if not exists goals_user_idx      on public.goals (user_id);
-create index if not exists categories_user_idx on public.categories (user_id);
+create index if not exists tasks_user_idx              on public.tasks (user_id);
+create index if not exists tasks_deadline_idx          on public.tasks (user_id, deadline);
+create index if not exists tasks_status_idx            on public.tasks (user_id, status);
+create index if not exists projects_user_idx           on public.projects (user_id);
+create index if not exists goals_user_idx              on public.goals (user_id);
+create index if not exists categories_user_idx         on public.categories (user_id);
+create index if not exists habits_user_idx             on public.habits (user_id);
+create index if not exists habit_completions_user_idx  on public.habit_completions (user_id);
+create index if not exists habit_completions_habit_idx on public.habit_completions (habit_id, date);
 
 -- ── Row Level Security: each user can only touch their own rows ────
-alter table public.categories enable row level security;
-alter table public.goals      enable row level security;
-alter table public.projects   enable row level security;
-alter table public.tasks      enable row level security;
-alter table public.settings   enable row level security;
+alter table public.categories        enable row level security;
+alter table public.goals             enable row level security;
+alter table public.projects          enable row level security;
+alter table public.tasks             enable row level security;
+alter table public.settings          enable row level security;
+alter table public.habits            enable row level security;
+alter table public.habit_completions enable row level security;
 
 do $$
 declare t text;
 begin
-  foreach t in array array['categories','goals','projects','tasks','settings'] loop
+  foreach t in array array['categories','goals','projects','tasks','settings','habits','habit_completions'] loop
     execute format('drop policy if exists "own rows select" on public.%I', t);
     execute format('drop policy if exists "own rows insert" on public.%I', t);
     execute format('drop policy if exists "own rows update" on public.%I', t);

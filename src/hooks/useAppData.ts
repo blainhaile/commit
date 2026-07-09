@@ -4,7 +4,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import type {
-  Category, Goal, LevelInfo, Project, Settings, Task, Toast, WidgetPrefs, NotifPrefs, ThemeMode,
+  Category, Goal, Habit, HabitCompletion, HabitStatus, LevelInfo, Project, Settings, Task, Toast,
+  WidgetPrefs, NotifPrefs, ThemeMode,
 } from "@/types";
 import { db, loadAll } from "@/services/dataService";
 import { seedCategories, seedGoals, seedProjects, seedTasks } from "@/services/seed";
@@ -36,11 +37,14 @@ export function useAppData(user: User) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [habits, setHabits] = useState<Habit[]>([]);
+  const [habitCompletions, setHabitCompletions] = useState<HabitCompletion[]>([]);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [editorTask, setEditorTask] = useState<Partial<Task> | null>(null);
   const [editorProject, setEditorProject] = useState<Partial<Project> | null>(null);
   const [editorGoal, setEditorGoal] = useState<Partial<Goal> | null>(null);
   const [editorCategory, setEditorCategory] = useState<Partial<Category> | null>(null);
+  const [editorHabit, setEditorHabit] = useState<Partial<Habit> | null>(null);
   const [toasts, setToasts] = useState<AppToast[]>([]);
   const [burst, setBurst] = useState(0);
 
@@ -58,6 +62,8 @@ export function useAppData(user: User) {
         setProjects(snap.projects);
         setGoals(snap.goals);
         setCategories(snap.categories);
+        setHabits(snap.habits);
+        setHabitCompletions(snap.habitCompletions);
         if (snap.settings) setSettings({ ...DEFAULT_SETTINGS, ...snap.settings });
         setBooted(true);
       })
@@ -231,6 +237,45 @@ export function useAppData(user: User) {
     });
     return out;
   }, [goals, tasks, projects]);
+
+  /* ---------- derived: habits (Phase 1 — daily view only) ---------- */
+  const activeHabits = useMemo(() => habits.filter((h) => h.active), [habits]);
+
+  const habitCompletionsByHabit = useMemo(() => {
+    const out: Record<string, HabitCompletion[]> = {};
+    habitCompletions.forEach((c) => { (out[c.habitId] ??= []).push(c); });
+    return out;
+  }, [habitCompletions]);
+
+  const todayHabitEntries = useMemo(
+    () => Object.fromEntries(habitCompletions.filter((c) => c.date === today).map((c) => [c.habitId, c])),
+    [habitCompletions, today],
+  ) as Record<string, HabitCompletion>;
+
+  /** Consecutive days (Completed or Partial) counting back from today; today itself
+   *  doesn't break the streak until it ends, mirroring the task streak's grace period. */
+  const habitStreaks = useMemo(() => {
+    const out: Record<string, number> = {};
+    habits.forEach((h) => {
+      const days = new Set(
+        (habitCompletionsByHabit[h.id] ?? [])
+          .filter((c) => c.status === "Completed" || c.status === "Partial")
+          .map((c) => c.date),
+      );
+      let cur = 0;
+      let d = today;
+      if (!days.has(d)) d = addDays(d, -1);
+      while (days.has(d) && d >= h.startDate) { cur += 1; d = addDays(d, -1); }
+      out[h.id] = cur;
+    });
+    return out;
+  }, [habits, habitCompletionsByHabit, today]);
+
+  const habitChainDone = useMemo(
+    () => activeHabits.filter((h) => todayHabitEntries[h.id]?.status === "Completed").length,
+    [activeHabits, todayHabitEntries],
+  );
+  const habitChainTotal = activeHabits.length;
 
   /* ---------- derived: analytics ---------- */
   const analytics = useMemo(() => {
@@ -452,6 +497,51 @@ export function useAppData(user: User) {
     setEditorCategory(null);
   }, []);
 
+  const saveHabit = useCallback((form: Habit) => {
+    setHabits((prev) => {
+      const exists = prev.some((x) => x.id === form.id);
+      db.upsertHabit(form, userId);
+      return exists ? prev.map((x) => (x.id === form.id ? form : x)) : [...prev, form];
+    });
+    setEditorHabit(null);
+  }, [userId]);
+
+  const deleteHabit = useCallback((id: string) => {
+    setHabits((prev) => prev.filter((x) => x.id !== id));
+    setHabitCompletions((prev) => prev.filter((x) => x.habitId !== id));
+    db.deleteHabit(id);
+    setEditorHabit(null);
+  }, []);
+
+  /** Logs (or overwrites) today's completion for a habit. XP scales with amount/goal,
+   *  capped at the base xpReward; streak multipliers are stored but not applied yet. */
+  const logHabitCompletion = useCallback((habitId: string, status: HabitStatus, amount: number, notes: string) => {
+    const habit = habits.find((h) => h.id === habitId);
+    if (!habit) return;
+    const existing = todayHabitEntries[habitId];
+    const xpEarned = status === "Missed"
+      ? 0
+      : Math.round(habit.xpReward * Math.min(1, habit.goalAmount > 0 ? amount / habit.goalAmount : 1));
+    const saved: HabitCompletion = {
+      id: existing?.id ?? uid("hc"),
+      habitId,
+      date: today,
+      status,
+      amount,
+      notes,
+      xpEarned,
+      createdAt: existing?.createdAt ?? nowStamp(),
+    };
+    setHabitCompletions((prev) => {
+      const exists = prev.some((x) => x.id === saved.id);
+      return exists ? prev.map((x) => (x.id === saved.id ? saved : x)) : [...prev, saved];
+    });
+    db.upsertHabitCompletion(saved, userId);
+    if (status === "Completed") {
+      pushToast({ kind: "xp", title: `+${xpEarned} XP — ${habit.name}`, sub: "Habit logged for today" });
+    }
+  }, [habits, todayHabitEntries, today, userId, pushToast]);
+
   const loadSample = useCallback(async () => {
     setCategories(seedCategories);
     setGoals(seedGoals);
@@ -483,9 +573,14 @@ export function useAppData(user: User) {
   const openEditCategory = useCallback((c: Category) => setEditorCategory(c), []);
   const closeCategoryEditor = useCallback(() => setEditorCategory(null), []);
 
+  const openNewHabit = useCallback(() => setEditorHabit({}), []);
+  const openEditHabit = useCallback((h: Habit) => setEditorHabit(h), []);
+  const closeHabitEditor = useCallback(() => setEditorHabit(null), []);
+
   return {
     booted, loadError, user,
     tasks, projects, goals, categories, categoriesById, projectsById, goalsById,
+    habits, habitCompletions, activeHabits, todayHabitEntries, habitStreaks, habitChainDone, habitChainTotal,
     settings, patchSettings, setTheme, setWidgets, setNotifPrefs,
     toasts, burst, pushToast, fireConfetti,
     todayDone, todayTotal, todayPct, streak, longestStreak, xpToday, totalXP, level,
@@ -493,10 +588,12 @@ export function useAppData(user: User) {
     projectStats, categoryStats, goalStats, analytics,
     toggleComplete, saveTask, deleteTask, moveDeadline, toggleMilestone,
     saveProject, deleteProject, saveGoal, deleteGoal, saveCategory, deleteCategory, loadSample,
+    saveHabit, deleteHabit, logHabitCompletion,
     editorTask, openNewTask, openNewTaskOn, openEditTask, closeEditor,
     editorProject, openNewProject, openEditProject, closeProjectEditor,
     editorGoal, openNewGoal, openEditGoal, closeGoalEditor,
     editorCategory, openNewCategory, openEditCategory, closeCategoryEditor,
+    editorHabit, openNewHabit, openEditHabit, closeHabitEditor,
   };
 }
 

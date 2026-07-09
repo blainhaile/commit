@@ -2,7 +2,7 @@
    All persistence goes through here. The UI updates optimistically;
    every write is queued so the app stays fast even on slow networks.  */
 import { supabase } from "./supabase";
-import type { Category, Goal, Project, Settings, Task } from "@/types";
+import type { Category, Goal, Habit, HabitCompletion, Project, Settings, Task } from "@/types";
 
 /* ---------- row ↔ model mapping ---------- */
 
@@ -79,6 +79,66 @@ const categoryToRow = (c: Category, userId: string) => ({
 });
 const rowToCategory = (r: any): Category => ({ id: r.id, name: r.name, color: r.color, icon: r.icon });
 
+const habitToRow = (h: Habit, userId: string) => ({
+  id: h.id,
+  user_id: userId,
+  name: h.name,
+  category_id: h.categoryId,
+  description: h.description,
+  frequency_type: h.frequencyType,
+  target_days_per_week: h.targetDaysPerWeek,
+  goal_amount: h.goalAmount,
+  measurement_unit: h.measurementUnit,
+  xp_reward: h.xpReward,
+  difficulty: h.difficulty,
+  streak_multipliers: h.streakMultipliers,
+  start_date: h.startDate,
+  active: h.active,
+});
+const rowToHabit = (r: any): Habit => ({
+  id: r.id,
+  name: r.name,
+  categoryId: r.category_id,
+  description: r.description ?? "",
+  frequencyType: r.frequency_type,
+  targetDaysPerWeek: r.target_days_per_week,
+  goalAmount: Number(r.goal_amount ?? 1),
+  measurementUnit: r.measurement_unit ?? "count",
+  xpReward: r.xp_reward ?? 10,
+  difficulty: r.difficulty ?? "Medium",
+  streakMultipliers: r.streak_multipliers ?? [],
+  startDate: r.start_date,
+  active: r.active ?? true,
+  createdAt: (r.created_at ?? "").slice(0, 10),
+});
+
+const habitCompletionToRow = (c: HabitCompletion, userId: string) => ({
+  id: c.id,
+  user_id: userId,
+  habit_id: c.habitId,
+  date: c.date,
+  status: c.status,
+  amount: c.amount,
+  notes: c.notes,
+  xp_earned: c.xpEarned,
+});
+const rowToHabitCompletion = (r: any): HabitCompletion => ({
+  id: r.id,
+  habitId: r.habit_id,
+  date: r.date,
+  status: r.status,
+  amount: Number(r.amount ?? 0),
+  notes: r.notes ?? "",
+  xpEarned: r.xp_earned ?? 0,
+  createdAt: r.created_at ? toLocalStamp(r.created_at) : nowStampFallback(),
+});
+
+function nowStampFallback(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:00`;
+}
+
 /* ---------- write queue (serialized, fire-and-forget with logging) ---------- */
 
 let chain: Promise<unknown> = Promise.resolve();
@@ -98,24 +158,30 @@ export interface Snapshot {
   projects: Project[];
   goals: Goal[];
   categories: Category[];
+  habits: Habit[];
+  habitCompletions: HabitCompletion[];
   settings: Partial<Settings> | null;
 }
 
 export async function loadAll(userId: string): Promise<Snapshot> {
-  const [tasks, projects, goals, categories, settings] = await Promise.all([
+  const [tasks, projects, goals, categories, habits, habitCompletions, settings] = await Promise.all([
     supabase.from("tasks").select("*").order("created_at"),
     supabase.from("projects").select("*").order("created_at"),
     supabase.from("goals").select("*").order("created_at"),
     supabase.from("categories").select("*").order("created_at"),
+    supabase.from("habits").select("*").order("created_at"),
+    supabase.from("habit_completions").select("*").order("date"),
     supabase.from("settings").select("data").eq("user_id", userId).maybeSingle(),
   ]);
-  const firstError = tasks.error || projects.error || goals.error || categories.error;
+  const firstError = tasks.error || projects.error || goals.error || categories.error || habits.error || habitCompletions.error;
   if (firstError) throw firstError;
   return {
     tasks: (tasks.data ?? []).map(rowToTask),
     projects: (projects.data ?? []).map(rowToProject),
     goals: (goals.data ?? []).map(rowToGoal),
     categories: (categories.data ?? []).map(rowToCategory),
+    habits: (habits.data ?? []).map(rowToHabit),
+    habitCompletions: (habitCompletions.data ?? []).map(rowToHabitCompletion),
     settings: (settings.data?.data as Partial<Settings>) ?? null,
   };
 }
@@ -137,10 +203,18 @@ export const db = {
     enqueue(() => supabase.from("categories").upsert(categoryToRow(c, userId))),
   deleteCategory: (id: string) => enqueue(() => supabase.from("categories").delete().eq("id", id)),
 
+  upsertHabit: (h: Habit, userId: string) =>
+    enqueue(() => supabase.from("habits").upsert(habitToRow(h, userId))),
+  deleteHabit: (id: string) => enqueue(() => supabase.from("habits").delete().eq("id", id)),
+
+  upsertHabitCompletion: (c: HabitCompletion, userId: string) =>
+    enqueue(() => supabase.from("habit_completions").upsert(habitCompletionToRow(c, userId))),
+  deleteHabitCompletion: (id: string) => enqueue(() => supabase.from("habit_completions").delete().eq("id", id)),
+
   saveSettings: (s: Settings, userId: string) =>
     enqueue(() => supabase.from("settings").upsert({ user_id: userId, data: s, updated_at: new Date().toISOString() })),
 
-  bulkInsert: async (snap: Omit<Snapshot, "settings">, userId: string) => {
+  bulkInsert: async (snap: Pick<Snapshot, "categories" | "goals" | "projects" | "tasks">, userId: string) => {
     const cats = snap.categories.map((c) => categoryToRow(c, userId));
     const goals = snap.goals.map((g) => goalToRow(g, userId));
     const projects = snap.projects.map((p) => projectToRow(p, userId));

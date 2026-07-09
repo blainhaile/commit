@@ -16,7 +16,7 @@ export const NAV: { id: Page; label: string; icon: typeof LayoutDashboard; soon?
   { id: "goals",      label: "Goals",          icon: Target },
   { id: "categories", label: "Categories",     icon: Tag },
   { id: "analytics",  label: "Analytics",      icon: BarChart3 },
-  { id: "habits",     label: "Habits",         icon: Repeat,    soon: true },
+  { id: "habits",     label: "Habits",         icon: Repeat },
   { id: "savings",    label: "Savings Tracker", icon: PiggyBank, soon: true },
   { id: "settings",   label: "Settings",       icon: Settings },
 ];

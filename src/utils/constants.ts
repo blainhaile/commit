@@ -1,5 +1,5 @@
 /* ── Commit · shared constants & palette ────────────────────────────── */
-import type { Difficulty, Priority, Recurring, Status } from "@/types";
+import type { Difficulty, HabitFrequencyType, HabitStatus, Priority, Recurring, Status, StreakMultiplierTier } from "@/types";
 
 export const APP_NAME = "Commit";
 export const APP_TAGLINE = "Every task is a commitment to your future.";
@@ -44,6 +44,24 @@ export const CHART = {
   areaTo: "rgba(112,145,230,0)",
   grid: "rgba(61,82,160,.10)",
   tick: "#6B76A3",
+};
+
+/* Habits */
+export const HABIT_FREQUENCIES: HabitFrequencyType[] = ["Daily", "Weekly"];
+export const HABIT_STATUSES: HabitStatus[] = ["Completed", "Partial", "Missed"];
+export const MEASUREMENT_UNITS = ["minutes", "hours", "count", "pages", "reps", "steps", "glasses"];
+
+export const DEFAULT_STREAK_MULTIPLIERS: StreakMultiplierTier[] = [
+  { days: 7, multiplier: 1.1 },
+  { days: 30, multiplier: 1.25 },
+  { days: 90, multiplier: 1.5 },
+  { days: 365, multiplier: 2 },
+];
+
+export const HABIT_STATUS_COLOR: Record<HabitStatus, string> = {
+  Completed: "#4E9B6E",
+  Partial: "#C77B3F",
+  Missed: "#C0455E",
 };
 
 let _uid = 0;
