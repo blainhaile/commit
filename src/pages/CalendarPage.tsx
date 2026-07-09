@@ -1,0 +1,202 @@
+/* ── Commit · Calendar ──────────────────────────────────────────────── */
+import React, { useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import type { AppData } from "@/hooks/useAppData";
+import type { Task } from "@/types";
+import { TaskRow } from "@/components/tasks";
+import { iso, parseISO, shortDate, todayISO, weekday } from "@/utils/date";
+
+const VIEWS = ["Month", "Week", "Day", "Agenda"] as const;
+type View = (typeof VIEWS)[number];
+
+export function CalendarPage({ app }: { app: AppData }) {
+  const { tasks, categoriesById, openEditTask, openNewTaskOn, moveDeadline } = app;
+  const [view, setView] = useState<View>("Month");
+  const [anchor, setAnchor] = useState(() => new Date());
+  const [dragOver, setDragOver] = useState<string | null>(null);
+  const today = todayISO();
+
+  const tasksByDay = useMemo(() => {
+    const map: Record<string, Task[]> = {};
+    tasks.forEach((task) => {
+      if (!task.deadline || task.status === "Archived") return;
+      (map[task.deadline] = map[task.deadline] || []).push(task);
+    });
+    return map;
+  }, [tasks]);
+
+  const monthLabel = anchor.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+
+  const shift = (n: number) => {
+    const d = new Date(anchor);
+    if (view === "Month") d.setMonth(d.getMonth() + n);
+    else if (view === "Week") d.setDate(d.getDate() + 7 * n);
+    else d.setDate(d.getDate() + n);
+    setAnchor(d);
+  };
+
+  const DayCell = ({ dateStr, dim, tall }: { dateStr: string; dim?: boolean; tall?: boolean }) => {
+    const dayTasks = tasksByDay[dateStr] || [];
+    const isToday = dateStr === today;
+    return (
+      <div
+        onDragOver={(e) => { e.preventDefault(); setDragOver(dateStr); }}
+        onDragLeave={() => setDragOver((d) => (d === dateStr ? null : d))}
+        onDrop={(e) => {
+          e.preventDefault();
+          const id = e.dataTransfer.getData("text/task");
+          if (id) moveDeadline(id, dateStr);
+          setDragOver(null);
+        }}
+        onClick={() => openNewTaskOn(dateStr)}
+        className="rounded-xl p-1.5 flex flex-col gap-1 cursor-pointer transition-all"
+        style={{
+          minHeight: tall ? 220 : 96,
+          background: dragOver === dateStr ? "var(--brand-soft)" : "var(--inset)",
+          border: `1px solid ${isToday ? "var(--brand-2)" : "var(--border)"}`,
+          boxShadow: isToday ? "0 0 0 3px rgba(112,145,230,.16)" : undefined,
+          opacity: dim ? 0.45 : 1,
+        }}
+      >
+        <div className={`text-xs font-semibold px-1 ${isToday ? "t-brand" : "t-muted"}`}>{parseISO(dateStr).getDate()}</div>
+        <div className="flex flex-col gap-1 overflow-hidden">
+          {dayTasks.slice(0, tall ? 12 : 3).map((task) => {
+            const cat = task.categoryId ? categoriesById[task.categoryId] : null;
+            const isDone = task.status === "Completed";
+            const c = cat?.color || "#8697C4";
+            return (
+              <div
+                key={task.id}
+                draggable
+                onDragStart={(e) => e.dataTransfer.setData("text/task", task.id)}
+                onClick={(e) => { e.stopPropagation(); openEditTask(task); }}
+                className={`text-xs px-1.5 py-1 rounded-md truncate cursor-grab active:cursor-grabbing transition-transform hover:-translate-y-px ${isDone ? "line-through opacity-50" : ""}`}
+                style={{ background: `${c}1C`, color: c, fontWeight: 600, border: `1px solid ${c}30` }}
+                title={`${task.title} — drag to move deadline`}
+              >
+                {task.title}
+              </div>
+            );
+          })}
+          {!tall && dayTasks.length > 3 && <div className="text-xs t-faint px-1">+{dayTasks.length - 3} more</div>}
+        </div>
+      </div>
+    );
+  };
+
+  let body: React.ReactNode = null;
+  if (view === "Month") {
+    const first = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+    const startOffset = (first.getDay() + 6) % 7; // Monday start
+    const start = new Date(first);
+    start.setDate(1 - startOffset);
+    const cells = Array.from({ length: 42 }, (_, i) => {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      return d;
+    });
+    body = (
+      <>
+        <div className="grid grid-cols-7 gap-1.5 mb-1.5">
+          {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
+            <div key={d} className="text-xs t-faint text-center font-semibold">{d}</div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 gap-1.5">
+          {cells.map((d) => <DayCell key={iso(d)} dateStr={iso(d)} dim={d.getMonth() !== anchor.getMonth()} />)}
+        </div>
+      </>
+    );
+  } else if (view === "Week") {
+    const start = new Date(anchor);
+    start.setDate(anchor.getDate() - ((anchor.getDay() + 6) % 7));
+    const cells = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      return d;
+    });
+    body = (
+      <div className="grid grid-cols-1 md:grid-cols-7 gap-1.5">
+        {cells.map((d) => (
+          <div key={iso(d)}>
+            <div className="text-xs t-faint text-center font-semibold mb-1.5">
+              {d.toLocaleDateString(undefined, { weekday: "short", day: "numeric" })}
+            </div>
+            <DayCell dateStr={iso(d)} tall />
+          </div>
+        ))}
+      </div>
+    );
+  } else if (view === "Day") {
+    const dateStr = iso(anchor);
+    const dayTasks = tasksByDay[dateStr] || [];
+    body = (
+      <div className="flex flex-col gap-2.5">
+        <div className="text-sm t-muted font-medium">
+          {anchor.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}
+        </div>
+        {dayTasks.map((task) => <TaskRow key={task.id} task={task} app={app} />)}
+        {dayTasks.length === 0 && (
+          <div className="cm-inset p-8 text-center text-sm t-muted">Nothing scheduled. Click below to add something.</div>
+        )}
+        <button className="cm-btn cm-btn-ghost self-start" onClick={() => openNewTaskOn(dateStr)}>
+          <Plus size={15} /> Add task on this day
+        </button>
+      </div>
+    );
+  } else {
+    const list = tasks
+      .filter((x) => x.deadline && x.deadline >= today && x.status !== "Archived")
+      .sort((a, b) => (a.deadline! < b.deadline! ? -1 : 1))
+      .slice(0, 30);
+    const groups: Record<string, Task[]> = {};
+    list.forEach((x) => (groups[x.deadline!] = groups[x.deadline!] || []).push(x));
+    body = (
+      <div className="flex flex-col gap-4">
+        {Object.entries(groups).map(([d, group]) => (
+          <div key={d}>
+            <div className="text-xs font-bold t-brand uppercase tracking-wide mb-2">
+              {weekday(d)} · {shortDate(d)} {d === today ? "· Today" : ""}
+            </div>
+            <div className="flex flex-col gap-2">
+              {group.map((task) => <TaskRow key={task.id} task={task} app={app} compact />)}
+            </div>
+          </div>
+        ))}
+        {list.length === 0 && <div className="text-sm t-muted">Nothing on the horizon.</div>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="cm-page flex flex-col gap-4">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-3">
+          <h1 className="cm-display text-2xl font-extrabold t-text">Calendar</h1>
+          <span className="text-sm t-muted">{monthLabel}</span>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="cm-card flex gap-1 p-1" style={{ borderRadius: 12 }}>
+            {VIEWS.map((v) => (
+              <button
+                key={v}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                style={view === v
+                  ? { background: "linear-gradient(150deg,#5b74c8,#3d52a0)", color: "#fff", boxShadow: "inset 0 1px 0 rgba(255,255,255,.3)" }
+                  : { color: "var(--muted)" }}
+                onClick={() => setView(v)}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
+          <button className="cm-btn cm-btn-ghost px-2.5" onClick={() => shift(-1)} aria-label="Previous"><ChevronLeft size={16} /></button>
+          <button className="cm-btn cm-btn-ghost" onClick={() => setAnchor(new Date())}>Today</button>
+          <button className="cm-btn cm-btn-ghost px-2.5" onClick={() => shift(1)} aria-label="Next"><ChevronRight size={16} /></button>
+        </div>
+      </div>
+      <div className="text-xs t-faint">Click a day to create a task · drag a task chip to move its deadline.</div>
+      <div className="cm-card p-3 md:p-4">{body}</div>
+    </div>
+  );
+}
