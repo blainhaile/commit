@@ -86,6 +86,12 @@ export interface NotifPrefs {
   m15: boolean;
 }
 
+export interface GoogleCalendarFeed {
+  id: string;
+  label: string;
+  url: string; // the private "secret address in iCal format" from Google Calendar settings
+}
+
 export interface Settings {
   theme: ThemeMode;
   displayName: string;
@@ -93,6 +99,7 @@ export interface Settings {
   notifPrefs: NotifPrefs;
   activeYear: number;              // the year pages default to showing
   dismissedArchiveYear: number | null; // "Not now" was clicked for this target year — don't re-prompt until it changes
+  googleCalendarFeeds: GoogleCalendarFeed[];
 }
 
 export interface LevelInfo {

@@ -1,17 +1,17 @@
 /* ── Commit · Analytics, Settings, Locked ───────────────────────────── */
-import React from "react";
+import React, { useState } from "react";
 import {
-  Archive, BellRing, CheckSquare, Clock, Database, Flame, FolderKanban, ListChecks, Lock,
-  LogOut, Moon, Sun, Target, User,
+  Archive, BellRing, CalendarClock, CheckSquare, Clock, Database, Flame, FolderKanban, ListChecks, Lock,
+  LogOut, Moon, Plus, Sun, Target, User, X,
 } from "lucide-react";
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import type { AppData } from "@/hooks/useAppData";
-import type { ThemeMode } from "@/types";
+import type { GoogleCalendarFeed, ThemeMode } from "@/types";
 import { Dot, Stat, Switch } from "@/components/ui";
-import { APP_TAGLINE } from "@/utils/constants";
+import { APP_TAGLINE, uid } from "@/utils/constants";
 
 const tooltipStyle = {
   background: "var(--panel-strong)",
@@ -137,6 +137,29 @@ export function SettingsPage({ app, onSignOut }: { app: AppData; onSignOut: () =
     m15: "15 minutes before",
   };
 
+  const [feedLabel, setFeedLabel] = useState("");
+  const [feedUrl, setFeedUrl] = useState("");
+
+  const addFeed = () => {
+    if (!feedLabel.trim() || !feedUrl.trim()) return;
+    const next: GoogleCalendarFeed[] = [
+      ...settings.googleCalendarFeeds,
+      { id: uid("gcal"), label: feedLabel.trim(), url: feedUrl.trim() },
+    ];
+    patchSettings({ googleCalendarFeeds: next });
+    setFeedLabel("");
+    setFeedUrl("");
+  };
+  const renameFeed = (id: string, label: string) => {
+    patchSettings({ googleCalendarFeeds: settings.googleCalendarFeeds.map((f) => (f.id === id ? { ...f, label } : f)) });
+  };
+  const updateFeedUrl = (id: string, url: string) => {
+    patchSettings({ googleCalendarFeeds: settings.googleCalendarFeeds.map((f) => (f.id === id ? { ...f, url } : f)) });
+  };
+  const removeFeed = (id: string) => {
+    patchSettings({ googleCalendarFeeds: settings.googleCalendarFeeds.filter((f) => f.id !== id) });
+  };
+
   return (
     <div className="cm-page flex flex-col gap-5 max-w-2xl">
       <h1 className="cm-display text-2xl font-extrabold t-text">Settings</h1>
@@ -246,6 +269,67 @@ export function SettingsPage({ app, onSignOut }: { app: AppData; onSignOut: () =
           ) : (
             <span className="text-xs t-faint">Nothing to archive yet.</span>
           )}
+        </div>
+      </div>
+
+      {/* Google Calendar */}
+      <div className="cm-card p-5 flex flex-col gap-3">
+        <div className="font-semibold t-text text-sm flex items-center gap-2"><CalendarClock size={15} className="t-brand" /> Google Calendar</div>
+        <div className="text-xs t-muted">
+          Paste the "secret address in iCal format" from Google Calendar → Settings → your calendar → Integrate
+          calendar. Read-only, shown on its own tab — never merged into your tasks.
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          {settings.googleCalendarFeeds.map((feed) => (
+            <div key={feed.id} className="cm-inset flex flex-col gap-1.5 px-3 py-2.5">
+              <div className="flex items-center gap-2">
+                <input
+                  className="cm-input text-sm font-semibold"
+                  style={{ background: "transparent", border: "none", boxShadow: "none", padding: 0 }}
+                  value={feed.label}
+                  onChange={(e) => renameFeed(feed.id, e.target.value)}
+                  placeholder="Label"
+                />
+                <button
+                  className="ml-auto t-faint hover:text-[var(--bad)] transition-colors shrink-0"
+                  onClick={() => removeFeed(feed.id)}
+                  aria-label="Remove calendar"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+              <input
+                className="cm-input text-xs"
+                style={{ color: "var(--faint)" }}
+                value={feed.url}
+                onChange={(e) => updateFeedUrl(feed.id, e.target.value)}
+                placeholder="https://calendar.google.com/calendar/ical/..."
+              />
+            </div>
+          ))}
+          {settings.googleCalendarFeeds.length === 0 && (
+            <div className="text-xs t-faint px-1">No calendars linked yet.</div>
+          )}
+        </div>
+
+        <div className="cm-inset flex flex-col gap-2 p-3">
+          <input
+            className="cm-input"
+            placeholder="Label — e.g. Personal"
+            value={feedLabel}
+            onChange={(e) => setFeedLabel(e.target.value)}
+          />
+          <input
+            className="cm-input"
+            placeholder="Secret iCal URL"
+            value={feedUrl}
+            onChange={(e) => setFeedUrl(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addFeed()}
+          />
+          <button className="cm-btn cm-btn-ghost self-start" onClick={addFeed} disabled={!feedLabel.trim() || !feedUrl.trim()}>
+            <Plus size={15} /> Add calendar
+          </button>
         </div>
       </div>
 

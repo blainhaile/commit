@@ -25,6 +25,7 @@ const DEFAULT_SETTINGS: Settings = {
   notifPrefs: { d1: true, h1: true, m15: false },
   activeYear: new Date().getFullYear(),
   dismissedArchiveYear: null,
+  googleCalendarFeeds: [],
 };
 
 export interface ProjectStat { name: string; total: number; done: number; pct: number; eta: string }

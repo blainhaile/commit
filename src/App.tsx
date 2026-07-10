@@ -19,6 +19,7 @@ import {
   CategoriesPage, CategoryModal, GoalModal, GoalsPage, ProjectModal, ProjectsPage,
 } from "@/pages/CollectionsPages";
 import { HabitsPage } from "@/pages/HabitsPage";
+import { GoogleCalendarPage } from "@/pages/GoogleCalendarPage";
 import { AnalyticsPage, LockedPage, SettingsPage } from "@/pages/SystemPages";
 import { APP_NAME, APP_TAGLINE } from "@/utils/constants";
 
@@ -95,6 +96,7 @@ function Shell({ user, onSignOut }: { user: User; onSignOut: () => Promise<void>
     analytics: <AnalyticsPage app={app} />,
     settings: <SettingsPage app={app} onSignOut={onSignOut} />,
     habits: <HabitsPage app={app} />,
+    googleCalendar: <GoogleCalendarPage app={app} go={go} />,
     savings: (
       <LockedPage
         title="Savings Tracker"
