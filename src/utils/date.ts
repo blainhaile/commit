@@ -8,7 +8,16 @@ export const parseISO = (s: string) => {
   return new Date(y, m - 1, d);
 };
 export const todayISO = () => iso(new Date());
-export const addDays = (dateStr: string, n: number) => iso(new Date(parseISO(dateStr).getTime() + n * DAY_MS));
+/** Advances by calendar day using the local y/m/d components (via setDate), not
+ *  by adding raw milliseconds — a fixed-ms step can land on the same calendar
+ *  day again (or skip one) across a DST transition, since a "day" isn't always
+ *  exactly 86400000ms in local time. setDate rolls over months/years correctly
+ *  and is immune to that, since it never leaves the local calendar field space. */
+export const addDays = (dateStr: string, n: number) => {
+  const d = parseISO(dateStr);
+  d.setDate(d.getDate() + n);
+  return iso(d);
+};
 export const daysAgo = (n: number) => iso(new Date(Date.now() - n * DAY_MS));
 export const daysAhead = (n: number) => iso(new Date(Date.now() + n * DAY_MS));
 export const shortDate = (s: string) => parseISO(s).toLocaleDateString(undefined, { month: "short", day: "numeric" });

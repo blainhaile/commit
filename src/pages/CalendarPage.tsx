@@ -32,7 +32,11 @@ export function CalendarPage({ app }: { app: AppData }) {
       const totalDays = Math.round((parseISO(task.deadline).getTime() - parseISO(task.startDate!).getTime()) / DAY_MS) + 1;
       let d = task.startDate!;
       let dayIndex = 1;
-      while (d <= task.deadline) {
+      // Safety cap: guarantees this terminates no matter what — a correctness bug in
+      // addDays, a future data-entry edge case, whatever — a stuck loop here freezes
+      // the whole tab, so bail out rather than trust the loop condition alone.
+      const MAX_SPAN_DAYS = 366;
+      while (d <= task.deadline && dayIndex <= MAX_SPAN_DAYS) {
         const segment = d === task.startDate ? "start" : d === task.deadline ? "end" : "middle";
         (map[d] = map[d] || []).push({ task, segment, dayIndex, totalDays });
         d = addDays(d, 1);
