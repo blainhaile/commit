@@ -1,7 +1,7 @@
 /* ── Commit · Analytics, Settings, Locked ───────────────────────────── */
 import React from "react";
 import {
-  BellRing, CheckSquare, Clock, Database, Flame, FolderKanban, ListChecks, Lock,
+  Archive, BellRing, CheckSquare, Clock, Database, Flame, FolderKanban, ListChecks, Lock,
   LogOut, Moon, Sun, Target, User,
 } from "lucide-react";
 import {
@@ -121,8 +121,9 @@ export function AnalyticsPage({ app }: { app: AppData }) {
 
 /* ════════ Settings ════════ */
 export function SettingsPage({ app, onSignOut }: { app: AppData; onSignOut: () => void }) {
-  const { settings, setTheme, setWidgets, setNotifPrefs, patchSettings, user, loadSample, tasks } = app;
+  const { settings, setTheme, setWidgets, setNotifPrefs, patchSettings, user, loadSample, tasks, archiveYear } = app;
   const { theme, widgets, notifPrefs } = settings;
+  const currentCalendarYear = new Date().getFullYear();
 
   const widgetLabels: Record<keyof typeof widgets, string> = {
     focus: "Daily Focus",
@@ -227,6 +228,25 @@ export function SettingsPage({ app, onSignOut }: { app: AppData; onSignOut: () =
         {tasks.length === 0 && (
           <button className="cm-btn cm-btn-soft self-start" onClick={loadSample}>Load sample workspace</button>
         )}
+      </div>
+
+      {/* Yearly archive */}
+      <div className="cm-card p-5 flex flex-col gap-3">
+        <div className="font-semibold t-text text-sm flex items-center gap-2"><Archive size={15} className="t-brand" /> Yearly archive</div>
+        <div className="text-xs t-muted">
+          Archiving never deletes anything — it just moves the "this year" default on Tasks, Projects, and Goals
+          forward. Past years stay fully browsable from the year filter on each page.
+        </div>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="text-xs t-muted">Active year: <span className="font-semibold t-text">{settings.activeYear}</span></div>
+          {currentCalendarYear > settings.activeYear ? (
+            <button className="cm-btn cm-btn-soft self-start" onClick={archiveYear}>
+              Archive {settings.activeYear} & start fresh
+            </button>
+          ) : (
+            <span className="text-xs t-faint">Nothing to archive yet.</span>
+          )}
+        </div>
       </div>
 
       <div className="text-xs t-faint text-center pb-4">Commit — {APP_TAGLINE}</div>

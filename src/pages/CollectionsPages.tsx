@@ -7,7 +7,7 @@ import {
 import type { Category, Goal, Milestone, Project, Task } from "@/types";
 import type { AppData } from "@/hooks/useAppData";
 import { CheckButton, CollapsibleSection, Dot, EmptyState, Field, Modal, ProgressBar, Ring, Switch } from "@/components/ui";
-import { daysAhead, shortDate, todayISO } from "@/utils/date";
+import { daysAhead, matchesYearFilter, shortDate, todayISO, yearOptions, type YearFilter } from "@/utils/date";
 import { uid } from "@/utils/constants";
 
 /* ---------- shared drag-to-reorder helper (plain HTML5 DnD, no library) ---------- */
@@ -55,14 +55,38 @@ function DragHandle(props: React.HTMLAttributes<HTMLSpanElement>) {
   );
 }
 
+/* ---------- shared year filter select ---------- */
+function YearSelect({ value, onChange, years, activeYear }: {
+  value: YearFilter; onChange: (v: YearFilter) => void; years: number[]; activeYear: number;
+}) {
+  return (
+    <select
+      className="cm-select"
+      style={{ width: "auto", minWidth: 140 }}
+      value={typeof value === "number" ? String(value) : value}
+      onChange={(e) => {
+        const v = e.target.value;
+        onChange(v === "current" || v === "all" ? v : Number(v));
+      }}
+    >
+      <option value="current">This year ({activeYear})</option>
+      {years.filter((y) => y !== activeYear).map((y) => <option key={y} value={y}>{y}</option>)}
+      <option value="all">All years</option>
+    </select>
+  );
+}
+
 /* ════════ Projects ════════ */
 export function ProjectsPage({ app }: { app: AppData }) {
-  const { projects, projectStats, categoriesById, goalsById, openNewProject, openEditProject, reorderProjects, loadSample } = app;
+  const { projects, projectStats, categoriesById, goalsById, settings, openNewProject, openEditProject, reorderProjects, loadSample } = app;
   const drag = useReorderDrag(reorderProjects);
+  const activeYear = settings.activeYear;
+  const [yearFilter, setYearFilter] = useState<YearFilter>("current");
 
   const isDone = (p: Project) => (projectStats[p.id]?.pct ?? 0) === 100;
-  const activeProjects = projects.filter((p) => !isDone(p));
-  const doneProjects = projects.filter(isDone);
+  const yearFiltered = projects.filter((p) => matchesYearFilter(p.year, isDone(p), yearFilter, activeYear));
+  const activeProjects = yearFiltered.filter((p) => !isDone(p));
+  const doneProjects = yearFiltered.filter(isDone);
 
   const renderCard = (p: Project) => {
     const s = projectStats[p.id];
@@ -113,7 +137,10 @@ export function ProjectsPage({ app }: { app: AppData }) {
     <div className="cm-page flex flex-col gap-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="cm-display text-2xl font-extrabold t-text">Projects</h1>
-        <button className="cm-btn cm-btn-primary" onClick={openNewProject}><Plus size={16} /> New project</button>
+        <div className="flex items-center gap-2">
+          <YearSelect value={yearFilter} onChange={setYearFilter} years={yearOptions(projects, activeYear)} activeYear={activeYear} />
+          <button className="cm-btn cm-btn-primary" onClick={openNewProject}><Plus size={16} /> New project</button>
+        </div>
       </div>
       {projects.length > 1 && <div className="text-xs t-faint -mt-2">Drag the grip to reorder.</div>}
 
@@ -133,6 +160,9 @@ export function ProjectsPage({ app }: { app: AppData }) {
             </div>
           }
         />
+      )}
+      {projects.length > 0 && yearFiltered.length === 0 && (
+        <EmptyState icon={<FolderKanban size={22} />} title="Nothing in this year" blurb="Try a different year from the filter above." />
       )}
 
       <CollapsibleSection label="Completed" count={doneProjects.length}>
@@ -205,8 +235,10 @@ export function ProjectModal({ app }: { app: AppData }) {
 
 /* ════════ Goals ════════ */
 export function GoalsPage({ app }: { app: AppData }) {
-  const { goals, goalStats, toggleMilestone, reorderMilestones, openNewGoal, openEditGoal, reorderGoals, loadSample } = app;
+  const { goals, goalStats, toggleMilestone, reorderMilestones, openNewGoal, openEditGoal, reorderGoals, settings, loadSample } = app;
   const drag = useReorderDrag(reorderGoals);
+  const activeYear = settings.activeYear;
+  const [yearFilter, setYearFilter] = useState<YearFilter>("current");
   // Composite "goalId::milestoneId" keys, since renderCard runs inside a .map() and
   // can't call its own hook per goal — one shared drag state, scoped per goal at drop time.
   const milestoneDrag = useReorderDrag((draggedKey, dropKey) => {
@@ -217,8 +249,9 @@ export function GoalsPage({ app }: { app: AppData }) {
   });
 
   const isDone = (g: Goal) => (goalStats[g.id]?.pct ?? 0) === 100;
-  const activeGoals = goals.filter((g) => !isDone(g));
-  const doneGoals = goals.filter(isDone);
+  const yearFiltered = goals.filter((g) => matchesYearFilter(g.year, isDone(g), yearFilter, activeYear));
+  const activeGoals = yearFiltered.filter((g) => !isDone(g));
+  const doneGoals = yearFiltered.filter(isDone);
 
   const renderCard = (g: Goal) => {
     const s = goalStats[g.id];
@@ -286,7 +319,10 @@ export function GoalsPage({ app }: { app: AppData }) {
     <div className="cm-page flex flex-col gap-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="cm-display text-2xl font-extrabold t-text">Goals</h1>
-        <button className="cm-btn cm-btn-primary" onClick={openNewGoal}><Plus size={16} /> New goal</button>
+        <div className="flex items-center gap-2">
+          <YearSelect value={yearFilter} onChange={setYearFilter} years={yearOptions(goals, activeYear)} activeYear={activeYear} />
+          <button className="cm-btn cm-btn-primary" onClick={openNewGoal}><Plus size={16} /> New goal</button>
+        </div>
       </div>
       {goals.length > 1 && <div className="text-xs t-faint -mt-2">Drag the grip to reorder.</div>}
 
@@ -306,6 +342,9 @@ export function GoalsPage({ app }: { app: AppData }) {
             </div>
           }
         />
+      )}
+      {goals.length > 0 && yearFiltered.length === 0 && (
+        <EmptyState icon={<Target size={22} />} title="Nothing in this year" blurb="Try a different year from the filter above." />
       )}
 
       <CollapsibleSection label="Completed" count={doneGoals.length}>

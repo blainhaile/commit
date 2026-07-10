@@ -223,6 +223,31 @@ export function Modal({ title, onClose, children, wide }: {
   );
 }
 
+/* ---------- Yearly archive prompt ---------- */
+export function ArchiveYearPrompt({ fromYear, toYear, onArchive, onDismiss }: {
+  fromYear: number; toYear: number; onArchive: () => void; onDismiss: () => void;
+}) {
+  return (
+    <Modal title="New year" onClose={onDismiss}>
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center gap-3">
+          <span className="cm-metal inline-flex items-center justify-center rounded-xl text-white shrink-0" style={{ width: 40, height: 40 }}>
+            <Archive size={18} />
+          </span>
+          <p className="text-sm t-muted">
+            It's <span className="font-semibold t-text">{toYear}</span> — archive <span className="font-semibold t-text">{fromYear}</span> and start fresh?
+            Nothing gets deleted — {fromYear} stays fully browsable from the year filter on each page.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button className="cm-btn cm-btn-primary" onClick={onArchive}>Archive & Start Fresh</button>
+          <button className="cm-btn cm-btn-ghost" onClick={onDismiss}>Not now</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 /* ---------- Labeled form field ---------- */
 export function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (

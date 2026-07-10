@@ -4,14 +4,15 @@ import { CheckSquare, Plus, Search } from "lucide-react";
 import type { AppData } from "@/hooks/useAppData";
 import { TaskRow } from "@/components/tasks";
 import { CollapsibleSection, EmptyState } from "@/components/ui";
-import { addDays, todayISO } from "@/utils/date";
+import { addDays, matchesYearFilter, todayISO, yearOptions, type YearFilter } from "@/utils/date";
 import { DIFFICULTIES, PRIORITIES, STATUSES } from "@/utils/constants";
 
 const QUICK_FILTERS = ["All", "Today", "Tomorrow", "This Week", "Overdue", "Completed"] as const;
 type Quick = (typeof QUICK_FILTERS)[number];
 
 export function TasksPage({ app }: { app: AppData }) {
-  const { tasks, categories, projects, goals, openNewTask, loadSample } = app;
+  const { tasks, categories, projects, goals, settings, openNewTask, loadSample } = app;
+  const activeYear = settings.activeYear;
   const [quick, setQuick] = useState<Quick>("All");
   const [fPriority, setFPriority] = useState("");
   const [fCategory, setFCategory] = useState("");
@@ -19,6 +20,7 @@ export function TasksPage({ app }: { app: AppData }) {
   const [fGoal, setFGoal] = useState("");
   const [fStatus, setFStatus] = useState("");
   const [fDiff, setFDiff] = useState("");
+  const [yearFilter, setYearFilter] = useState<YearFilter>("current");
   const [q, setQ] = useState("");
 
   const today = todayISO();
@@ -26,6 +28,7 @@ export function TasksPage({ app }: { app: AppData }) {
     return tasks
       .filter((task) => {
         if (task.status === "Archived" && fStatus !== "Archived") return false;
+        if (!matchesYearFilter(task.year, task.status === "Completed", yearFilter, activeYear)) return false;
         if (quick === "Today" && task.deadline !== today) return false;
         if (quick === "Tomorrow" && task.deadline !== addDays(today, 1)) return false;
         if (quick === "This Week" && !(task.deadline && task.deadline >= today && task.deadline <= addDays(today, 7))) return false;
@@ -51,7 +54,9 @@ export function TasksPage({ app }: { app: AppData }) {
         const at = a.deadlineTime || "", bt = b.deadlineTime || "";
         return at < bt ? -1 : at > bt ? 1 : 0;
       });
-  }, [tasks, quick, fPriority, fCategory, fProject, fGoal, fStatus, fDiff, q, today]);
+  }, [tasks, quick, fPriority, fCategory, fProject, fGoal, fStatus, fDiff, yearFilter, activeYear, q, today]);
+
+  const years = yearOptions(tasks, activeYear).filter((y) => y !== activeYear);
 
   // The "Completed" quick filter already asked for exactly the completed set —
   // collapsing it there would hide the very thing that was filtered for.
@@ -97,6 +102,19 @@ export function TasksPage({ app }: { app: AppData }) {
         {sel(fGoal, setFGoal, goals, "Goal")}
         {sel(fStatus, setFStatus, STATUSES, "Status")}
         {sel(fDiff, setFDiff, DIFFICULTIES, "Difficulty")}
+        <select
+          className="cm-select"
+          style={{ width: "auto", minWidth: 140 }}
+          value={typeof yearFilter === "number" ? String(yearFilter) : yearFilter}
+          onChange={(e) => {
+            const v = e.target.value;
+            setYearFilter(v === "current" || v === "all" ? v : Number(v));
+          }}
+        >
+          <option value="current">This year ({activeYear})</option>
+          {years.map((y) => <option key={y} value={y}>{y}</option>)}
+          <option value="all">All years</option>
+        </select>
       </div>
 
       <div className="flex flex-col gap-2.5 cm-stagger">

@@ -8,7 +8,7 @@ import { useAppData } from "@/hooks/useAppData";
 import { NAV, type Page } from "@/components/layout/nav";
 import { Sidebar, Topbar } from "@/components/layout";
 import { CommitMark } from "@/components/layout/CommitMark";
-import { Confetti, SkeletonCard, Spinner, Toasts } from "@/components/ui";
+import { ArchiveYearPrompt, Confetti, SkeletonCard, Spinner, Toasts } from "@/components/ui";
 import { TaskModal } from "@/components/tasks";
 import { HabitModal } from "@/components/habits";
 import { LoginPage } from "@/pages/LoginPage";
@@ -154,6 +154,14 @@ function Shell({ user, onSignOut }: { user: User; onSignOut: () => Promise<void>
       {app.editorGoal !== null && <GoalModal key={app.editorGoal.id ?? "new"} app={app} />}
       {app.editorCategory !== null && <CategoryModal key={app.editorCategory.id ?? "new"} app={app} />}
       {app.editorHabit !== null && <HabitModal key={app.editorHabit.id ?? "new"} app={app} />}
+      {app.needsArchivePrompt && (
+        <ArchiveYearPrompt
+          fromYear={app.settings.activeYear}
+          toYear={new Date().getFullYear()}
+          onArchive={app.archiveYear}
+          onDismiss={app.dismissArchivePrompt}
+        />
+      )}
     </div>
   );
 }
