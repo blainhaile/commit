@@ -30,6 +30,20 @@ export const nowStamp = () => {
   return `${todayISO()}T${pad(n.getHours())}:${pad(n.getMinutes())}:00`;
 };
 
+/** The 42-cell Monday-start month grid containing `anchor` — pure date math,
+ *  shared by any page that renders a month calendar (Calendar, Google Calendar). */
+export function monthGridDays(anchor: Date): Date[] {
+  const first = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+  const startOffset = (first.getDay() + 6) % 7; // Monday start
+  const start = new Date(first);
+  start.setDate(1 - startOffset);
+  return Array.from({ length: 42 }, (_, i) => {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    return d;
+  });
+}
+
 /** "14:30" -> "2:30 PM" */
 export function formatTime(hhmm: string): string {
   const [h, m] = hhmm.split(":").map(Number);

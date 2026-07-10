@@ -4,7 +4,7 @@ import { CalendarRange, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import type { AppData } from "@/hooks/useAppData";
 import type { Task } from "@/types";
 import { TaskRow } from "@/components/tasks";
-import { addDays, DAY_MS, formatTime, iso, parseISO, shortDate, todayISO, weekday } from "@/utils/date";
+import { addDays, DAY_MS, formatTime, iso, monthGridDays, parseISO, shortDate, todayISO, weekday } from "@/utils/date";
 
 const VIEWS = ["Month", "Week", "Day", "Agenda"] as const;
 type View = (typeof VIEWS)[number];
@@ -119,15 +119,7 @@ export function CalendarPage({ app }: { app: AppData }) {
 
   let body: React.ReactNode = null;
   if (view === "Month") {
-    const first = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
-    const startOffset = (first.getDay() + 6) % 7; // Monday start
-    const start = new Date(first);
-    start.setDate(1 - startOffset);
-    const cells = Array.from({ length: 42 }, (_, i) => {
-      const d = new Date(start);
-      d.setDate(start.getDate() + i);
-      return d;
-    });
+    const cells = monthGridDays(anchor);
     body = (
       <>
         <div className="grid grid-cols-7 gap-1.5 mb-1.5">
