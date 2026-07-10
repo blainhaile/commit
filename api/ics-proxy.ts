@@ -106,6 +106,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.status(200).json({ label: feed.label, events });
 }
 
+/** Resolves an ICAL.Time to a real Date. Date-only (all-day) values are read
+ *  straight from their raw y/m/d components and canonicalized to UTC midnight
+ *  ourselves — never through toJSDate() for these, which builds the Date using
+ *  whichever timezone happens to be running the code (UTC on Vercel today, but
+ *  not guaranteed, and wrong the instant it isn't) instead of the literal date
+ *  written in the ICS. Timed values (with an explicit TZID or UTC 'Z') are
+ *  already timezone-anchored by ical.js, so toJSDate() is safe for those. */
+function dateOf(t: ICAL.Time): Date {
+  if (t.isDate) return new Date(Date.UTC(t.year, t.month - 1, t.day));
+  return t.toJSDate();
+}
+
 function parseIcs(icsText: string): GCalEvent[] {
   const jcal = ICAL.parse(icsText);
   const comp = new ICAL.Component(jcal);
@@ -115,28 +127,51 @@ function parseIcs(icsText: string): GCalEvent[] {
   const windowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const windowEnd = new Date(windowStart.getTime() + WINDOW_DAYS * 86400000);
 
+  // Group by UID so a rescheduled single instance — a separate VEVENT carrying
+  // RECURRENCE-ID — gets related back to its series. Without this, the base
+  // RRULE has no idea that date was overridden and keeps generating it, so both
+  // the old (superseded) and new (rescheduled) date would appear.
+  const byUid = new Map<string, { master: any | null; overrides: any[] }>();
+  for (const vevent of vevents) {
+    const uid = String(vevent.getFirstPropertyValue("uid"));
+    const recurrenceId = vevent.getFirstPropertyValue("recurrence-id");
+    const entry = byUid.get(uid) ?? { master: null, overrides: [] };
+    if (recurrenceId) entry.overrides.push(vevent);
+    else entry.master = vevent;
+    byUid.set(uid, entry);
+  }
+
   const out: GCalEvent[] = [];
 
-  for (const vevent of vevents) {
-    const event = new ICAL.Event(vevent);
-    const durationMs = event.startDate && event.endDate
-      ? event.endDate.toJSDate().getTime() - event.startDate.toJSDate().getTime()
-      : 0;
-    const title = event.summary || "(untitled)";
+  const pushSingle = (event: ICAL.Event, recurring: boolean) => {
+    const start = dateOf(event.startDate);
+    if (start < windowStart || start > windowEnd) return;
+    const end = event.endDate ? dateOf(event.endDate) : start;
+    out.push({
+      id: `${event.uid}_${start.toISOString()}`,
+      title: event.summary || "(untitled)",
+      start: start.toISOString(),
+      end: end.toISOString(),
+      allDay: event.startDate.isDate,
+      recurring,
+      location: event.location || undefined,
+      description: event.description || undefined,
+    });
+  };
+
+  for (const [, { master, overrides }] of byUid) {
+    if (!master) {
+      // An override with no matching master shouldn't normally happen — handle it
+      // gracefully (as its own standalone event) rather than dropping it silently.
+      overrides.forEach((ov) => pushSingle(new ICAL.Event(ov), true));
+      continue;
+    }
+
+    const exceptions = overrides.map((ov) => new ICAL.Event(ov));
+    const event = new ICAL.Event(master, exceptions.length ? { exceptions } : undefined);
 
     if (!event.isRecurring()) {
-      const start = event.startDate.toJSDate();
-      if (start < windowStart || start > windowEnd) continue;
-      out.push({
-        id: event.uid,
-        title,
-        start: start.toISOString(),
-        end: new Date(start.getTime() + durationMs).toISOString(),
-        allDay: event.startDate.isDate,
-        recurring: false,
-        location: event.location || undefined,
-        description: event.description || undefined,
-      });
+      pushSingle(event, false);
       continue;
     }
 
@@ -147,19 +182,32 @@ function parseIcs(icsText: string): GCalEvent[] {
     // eslint-disable-next-line no-cond-assign
     while ((next = iterator.next() as ICAL.Time | null) && examined < MAX_EXAMINED_PER_EVENT && collected < MAX_COLLECTED_PER_EVENT) {
       examined++;
-      const occStart = next.toJSDate();
-      if (occStart > windowEnd) break;
-      if (occStart < windowStart) continue;
+      // Raw (un-overridden) occurrence times are monotonically increasing, so these
+      // are the correct signal for when to stop/skip walking the RRULE — the
+      // resolved (possibly overridden) date is checked separately below, since an
+      // override can move an occurrence outside the window in either direction.
+      const rawStart = dateOf(next);
+      if (rawStart > windowEnd) break;
+      if (rawStart < windowStart) continue;
       collected++;
+
+      // Resolves to the override's own details if this series has one for this
+      // exact date, otherwise the master's own recurring instance.
+      const details = event.getOccurrenceDetails(next);
+      const occEvent = details.item;
+      const occStart = dateOf(details.startDate);
+      const occEnd = details.endDate ? dateOf(details.endDate) : occStart;
+      if (occStart < windowStart || occStart > windowEnd) continue;
+
       out.push({
         id: `${event.uid}_${occStart.toISOString()}`,
-        title,
+        title: occEvent.summary || "(untitled)",
         start: occStart.toISOString(),
-        end: new Date(occStart.getTime() + durationMs).toISOString(),
-        allDay: next.isDate,
+        end: occEnd.toISOString(),
+        allDay: details.startDate.isDate,
         recurring: true,
-        location: event.location || undefined,
-        description: event.description || undefined,
+        location: occEvent.location || undefined,
+        description: occEvent.description || undefined,
       });
     }
   }

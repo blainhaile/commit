@@ -39,13 +39,26 @@ const PALETTE = ["#3D52A0", "#7091E6", "#8A5CB8", "#4E9B6E", "#B08A3D", "#C77B3F
 const WINDOW_DAYS = 60;
 const MAX_SPAN_DAYS = 366; // same bounded-loop precedent as the calendar's DST fix
 
+/** The server canonicalizes all-day event timestamps to UTC midnight from the
+ *  literal date written in the ICS (see dateOf() in api/ics-proxy.ts) — so an
+ *  all-day date must be read back via UTC fields here, not local ones. Reading
+ *  it with local fields would reintroduce the exact bug that fix closed: the
+ *  calendar day shifting depending on the browser's own timezone. Timed events
+ *  are real, timezone-anchored instants, so local fields are correct for those. */
+function dayKeyOf(isoString: string, allDay: boolean): string {
+  const d = new Date(isoString);
+  if (!allDay) return iso(d);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}`;
+}
+
 /** Which calendar day(s) an event occupies. An all-day event's `end` is
  *  exclusive per the iCal spec (a 3-day all-day event's end is technically
  *  the day *after* it finishes) — a timed event's end is not adjusted. */
 function daysSpanned(event: TaggedEvent): { day: string; segment: DayEntry["segment"] }[] {
-  const startDay = iso(new Date(event.start));
+  const startDay = dayKeyOf(event.start, event.allDay);
   const endMs = new Date(event.end).getTime();
-  const endDay = iso(event.allDay ? new Date(endMs - 1) : new Date(endMs));
+  const endDay = dayKeyOf(new Date(event.allDay ? endMs - 1 : endMs).toISOString(), event.allDay);
   if (startDay >= endDay) return [{ day: startDay, segment: "single" }];
   const out: { day: string; segment: DayEntry["segment"] }[] = [];
   let d = startDay;
