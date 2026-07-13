@@ -117,6 +117,12 @@ alter table public.goals      add column if not exists sort_index integer not nu
 alter table public.projects   add column if not exists sort_index integer not null default 0;
 alter table public.tasks      add column if not exists deadline_time text;
 
+-- ── Habit color-coding ───────────────────────────────────────────────
+-- Safe to leave here and re-run anytime — only adds the column if missing.
+-- Existing habits all land on the same default swatch until edited, same
+-- as any category would have before it got its own color.
+alter table public.habits add column if not exists color text not null default '#3D52A0';
+
 -- ── Yearly archive ───────────────────────────────────────────────────
 -- Safe to leave here and re-run anytime — only adds the column if missing.
 -- The default only stamps NEW rows correctly (now() is volatile, so ADD COLUMN

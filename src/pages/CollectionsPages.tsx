@@ -8,7 +8,7 @@ import type { Category, Goal, Milestone, Project, Task } from "@/types";
 import type { AppData } from "@/hooks/useAppData";
 import { CheckButton, CollapsibleSection, Dot, EmptyState, Field, Modal, ProgressBar, Ring, Switch } from "@/components/ui";
 import { daysAhead, matchesYearFilter, shortDate, todayISO, yearOptions, type YearFilter } from "@/utils/date";
-import { uid } from "@/utils/constants";
+import { SWATCHES, uid } from "@/utils/constants";
 
 /* ---------- shared drag-to-reorder helper (plain HTML5 DnD, no library) ---------- */
 function useReorderDrag(reorder: (draggedId: string, dropId: string) => void) {
@@ -614,8 +614,6 @@ export function GoalModal({ app }: { app: AppData }) {
 }
 
 /* ════════ Categories ════════ */
-const SWATCHES = ["#3D52A0", "#7091E6", "#8A5CB8", "#4E9B6E", "#B08A3D", "#C77B3F", "#C0455E", "#B85C8A", "#3D8AA0", "#3DA08A"];
-
 export function CategoriesPage({ app }: { app: AppData }) {
   const { categories, categoryStats, openNewCategory, openEditCategory, reorderCategories } = app;
   const drag = useReorderDrag(reorderCategories);

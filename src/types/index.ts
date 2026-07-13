@@ -129,6 +129,7 @@ export interface Habit {
   id: string;
   name: string;
   categoryId: string | null;
+  color: string;      // hex swatch — the habit's own color-code, independent of its category
   description: string;
   frequencyType: HabitFrequencyType;
   targetDaysPerWeek: number | null; // only meaningful when frequencyType === "Weekly"

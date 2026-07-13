@@ -13,6 +13,9 @@ export const BRAND = {
   background: "#EDE8F5",
 } as const;
 
+/* Shared color-picker swatches (categories, habits) */
+export const SWATCHES = ["#3D52A0", "#7091E6", "#8A5CB8", "#4E9B6E", "#B08A3D", "#C77B3F", "#C0455E", "#B85C8A", "#3D8AA0", "#3DA08A"];
+
 export const DIFFICULTIES: Difficulty[] = ["Easy", "Medium", "Hard", "Epic"];
 export const PRIORITIES: Priority[] = ["Critical", "High", "Medium", "Low"];
 export const STATUSES: Status[] = ["Not Started", "In Progress", "Completed", "Archived"];

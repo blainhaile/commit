@@ -4,7 +4,7 @@ import { Check, ChevronLeft, ChevronRight, CircleDot, Flame, MessageSquare, Penc
 import type { Habit, HabitFrequencyType, HabitStatus } from "@/types";
 import type { AppData } from "@/hooks/useAppData";
 import { Dot, Field, Modal, Ring } from "@/components/ui";
-import { DIFFICULTIES, HABIT_FREQUENCIES, MEASUREMENT_UNITS, DEFAULT_STREAK_MULTIPLIERS, uid } from "@/utils/constants";
+import { DIFFICULTIES, HABIT_FREQUENCIES, MEASUREMENT_UNITS, DEFAULT_STREAK_MULTIPLIERS, SWATCHES, uid } from "@/utils/constants";
 import { iso, monthGridDays, parseISO, pct, shortDate, todayISO } from "@/utils/date";
 import type { Difficulty } from "@/types";
 
@@ -37,7 +37,9 @@ export function HabitRow({ habit, app, date }: { habit: Habit; app: AppData; dat
     <div className="cm-card cm-card-hover p-4 flex flex-col gap-3 group">
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold t-text truncate">{habit.name}</div>
+          <div className="text-sm font-semibold t-text truncate flex items-center gap-2">
+            <Dot color={habit.color} size={10} /> {habit.name}
+          </div>
           <div className="flex items-center gap-2 mt-1 flex-wrap text-xs t-muted">
             {cat && <span className="inline-flex items-center gap-1.5"><Dot color={cat.color} /> {cat.name}</span>}
             <span>
@@ -134,14 +136,14 @@ export function HabitMonthGrid({ app }: { app: AppData }) {
   const cells = useMemo(() => monthGridDays(anchor), [anchor]);
 
   const dayStats = useMemo(() => {
-    const out: Record<string, { pctVal: number; neutral: boolean }> = {};
+    const out: Record<string, { pctVal: number; neutral: boolean; doneHabits: Habit[] }> = {};
     cells.forEach((d) => {
       const dateStr = iso(d);
-      if (dateStr >= today) { out[dateStr] = { pctVal: 0, neutral: true }; return; }
+      if (dateStr >= today) { out[dateStr] = { pctVal: 0, neutral: true, doneHabits: [] }; return; }
       const scheduled = activeHabits.filter((h) => h.startDate <= dateStr);
-      if (scheduled.length === 0) { out[dateStr] = { pctVal: 0, neutral: true }; return; }
-      const done = scheduled.filter((h) => creditDatesByHabit[h.id]?.has(dateStr)).length;
-      out[dateStr] = { pctVal: pct(done, scheduled.length), neutral: false };
+      if (scheduled.length === 0) { out[dateStr] = { pctVal: 0, neutral: true, doneHabits: [] }; return; }
+      const doneHabits = scheduled.filter((h) => creditDatesByHabit[h.id]?.has(dateStr));
+      out[dateStr] = { pctVal: pct(doneHabits.length, scheduled.length), neutral: false, doneHabits };
     });
     return out;
   }, [cells, activeHabits, creditDatesByHabit, today]);
@@ -166,7 +168,7 @@ export function HabitMonthGrid({ app }: { app: AppData }) {
           <button className="cm-btn cm-btn-ghost px-2.5" onClick={() => shift(1)} aria-label="Next month"><ChevronRight size={16} /></button>
         </div>
       </div>
-      <div className="text-xs t-faint">Each ring's fill is the share of active habits marked Done or Partial that day.</div>
+      <div className="text-xs t-faint">Each ring's fill is the share of active habits marked Done or Partial that day — the dots below show which ones.</div>
       <div>
         <div className="grid grid-cols-7 gap-1.5 mb-1.5">
           {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
@@ -178,8 +180,10 @@ export function HabitMonthGrid({ app }: { app: AppData }) {
             const dateStr = iso(d);
             const isToday = dateStr === today;
             const dim = d.getMonth() !== anchor.getMonth();
-            const { pctVal, neutral } = dayStats[dateStr];
+            const { pctVal, neutral, doneHabits } = dayStats[dateStr];
             const clickable = !neutral; // strictly-past days with habits scheduled that day
+            const shownDots = doneHabits.slice(0, 4);
+            const overflow = doneHabits.length - shownDots.length;
             return (
               <div
                 key={dateStr}
@@ -188,9 +192,9 @@ export function HabitMonthGrid({ app }: { app: AppData }) {
                 onClick={clickable ? () => setOpenDate(dateStr) : undefined}
                 onKeyDown={clickable ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpenDate(dateStr); } } : undefined}
                 aria-label={clickable ? `Edit habits for ${shortDate(dateStr)}` : undefined}
-                className={`rounded-xl flex items-center justify-center p-1.5 transition-all ${clickable ? "cursor-pointer hover:brightness-110" : ""}`}
+                className={`rounded-xl flex flex-col items-center justify-center gap-1 p-1.5 transition-all ${clickable ? "cursor-pointer hover:brightness-110" : ""}`}
                 style={{
-                  minHeight: 56,
+                  minHeight: 64,
                   background: "var(--inset)",
                   border: `1px solid ${isToday ? "var(--brand-2)" : "var(--border)"}`,
                   boxShadow: isToday ? "0 0 0 3px rgba(112,145,230,.16)" : undefined,
@@ -200,6 +204,17 @@ export function HabitMonthGrid({ app }: { app: AppData }) {
                 <Ring value={pctVal} size={34} stroke={4}>
                   <span className="text-[10px] font-bold t-text">{d.getDate()}</span>
                 </Ring>
+                <div className="flex items-center justify-center gap-1" style={{ height: 6 }}>
+                  {shownDots.map((h) => (
+                    <span
+                      key={h.id}
+                      title={h.name}
+                      className="inline-block rounded-full shrink-0"
+                      style={{ width: 5, height: 5, background: h.color }}
+                    />
+                  ))}
+                  {overflow > 0 && <span className="text-[8px] font-semibold t-faint leading-none">+{overflow}</span>}
+                </div>
               </div>
             );
           })}
@@ -234,6 +249,7 @@ function blankHabit(): Habit {
     id: uid("habit"),
     name: "",
     categoryId: null,
+    color: SWATCHES[0],
     description: "",
     frequencyType: "Daily",
     targetDaysPerWeek: null,
@@ -282,6 +298,24 @@ export function HabitModal({ app }: { app: AppData }) {
             {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </Field>
+        <div className="md:col-span-2">
+          <Field label="Color">
+            <div className="flex gap-2 flex-wrap">
+              {SWATCHES.map((s) => (
+                <button
+                  key={s}
+                  className="rounded-full transition-transform hover:scale-110"
+                  style={{
+                    width: 28, height: 28, background: s,
+                    boxShadow: form.color === s ? `0 0 0 3px var(--panel-strong), 0 0 0 5px ${s}` : "inset 0 1px 0 rgba(255,255,255,.3)",
+                  }}
+                  onClick={() => set("color", s)}
+                  aria-label={`Pick ${s}`}
+                />
+              ))}
+            </div>
+          </Field>
+        </div>
         <Field label="Difficulty">
           <select className="cm-select" value={form.difficulty} onChange={(e) => set("difficulty", e.target.value as Difficulty)}>
             {DIFFICULTIES.map((d) => <option key={d} value={d}>{d}</option>)}

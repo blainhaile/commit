@@ -3,6 +3,7 @@
    every write is queued so the app stays fast even on slow networks.  */
 import { supabase } from "./supabase";
 import type { Category, Goal, Habit, HabitCompletion, Project, Settings, Task } from "@/types";
+import { SWATCHES } from "@/utils/constants";
 
 /* ---------- row ↔ model mapping ---------- */
 
@@ -96,6 +97,7 @@ const habitToRow = (h: Habit, userId: string) => ({
   user_id: userId,
   name: h.name,
   category_id: h.categoryId,
+  color: h.color,
   description: h.description,
   frequency_type: h.frequencyType,
   target_days_per_week: h.targetDaysPerWeek,
@@ -111,6 +113,7 @@ const rowToHabit = (r: any): Habit => ({
   id: r.id,
   name: r.name,
   categoryId: r.category_id,
+  color: r.color ?? SWATCHES[0],
   description: r.description ?? "",
   frequencyType: r.frequency_type,
   targetDaysPerWeek: r.target_days_per_week,
