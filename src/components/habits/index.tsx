@@ -1,11 +1,11 @@
 /* ── Commit · habit components ──────────────────────────────────────── */
-import React, { useState } from "react";
-import { Check, CircleDot, Flame, MessageSquare, Pencil, Trash2, X } from "lucide-react";
+import React, { useMemo, useState } from "react";
+import { Check, ChevronLeft, ChevronRight, CircleDot, Flame, MessageSquare, Pencil, Trash2, X } from "lucide-react";
 import type { Habit, HabitFrequencyType, HabitStatus } from "@/types";
 import type { AppData } from "@/hooks/useAppData";
-import { Dot, Field, Modal } from "@/components/ui";
+import { Dot, Field, Modal, Ring } from "@/components/ui";
 import { DIFFICULTIES, HABIT_FREQUENCIES, MEASUREMENT_UNITS, DEFAULT_STREAK_MULTIPLIERS, uid } from "@/utils/constants";
-import { todayISO } from "@/utils/date";
+import { iso, monthGridDays, pct, todayISO } from "@/utils/date";
 import type { Difficulty } from "@/types";
 
 /* ---------- Habit row (today's mark-off card) ---------- */
@@ -103,6 +103,98 @@ export function HabitRow({ habit, app }: { habit: Habit; app: AppData }) {
           +{entry.xpEarned} XP earned today
         </div>
       )}
+    </div>
+  );
+}
+
+/* ---------- Monthly completion grid ----------
+   Reuses the exact Ring fill logic from the top-of-page daily chain ring,
+   just computed per day: fill = (Completed or Partial that day) / (active
+   habits that had started by that day). Today/future days and days with no
+   habits scheduled yet render as a dimmed, empty ring ("no data") rather
+   than a full-strength empty ring (which would misleadingly read as 0%). */
+export function HabitMonthGrid({ app }: { app: AppData }) {
+  const { activeHabits, habitCompletions } = app;
+  const [anchor, setAnchor] = useState(() => new Date());
+  const today = todayISO();
+
+  const creditDatesByHabit = useMemo(() => {
+    const out: Record<string, Set<string>> = {};
+    habitCompletions.forEach((c) => {
+      if (c.status !== "Completed" && c.status !== "Partial") return;
+      (out[c.habitId] ??= new Set()).add(c.date);
+    });
+    return out;
+  }, [habitCompletions]);
+
+  const cells = useMemo(() => monthGridDays(anchor), [anchor]);
+
+  const dayStats = useMemo(() => {
+    const out: Record<string, { pctVal: number; neutral: boolean }> = {};
+    cells.forEach((d) => {
+      const dateStr = iso(d);
+      if (dateStr >= today) { out[dateStr] = { pctVal: 0, neutral: true }; return; }
+      const scheduled = activeHabits.filter((h) => h.startDate <= dateStr);
+      if (scheduled.length === 0) { out[dateStr] = { pctVal: 0, neutral: true }; return; }
+      const done = scheduled.filter((h) => creditDatesByHabit[h.id]?.has(dateStr)).length;
+      out[dateStr] = { pctVal: pct(done, scheduled.length), neutral: false };
+    });
+    return out;
+  }, [cells, activeHabits, creditDatesByHabit, today]);
+
+  const monthLabel = anchor.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  const shift = (n: number) => setAnchor((a) => {
+    const d = new Date(a);
+    d.setMonth(d.getMonth() + n);
+    return d;
+  });
+
+  return (
+    <div className="cm-card p-5 flex flex-col gap-4">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-wide t-faint">Monthly view</div>
+          <div className="cm-display text-lg font-bold t-text mt-0.5">{monthLabel}</div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button className="cm-btn cm-btn-ghost px-2.5" onClick={() => shift(-1)} aria-label="Previous month"><ChevronLeft size={16} /></button>
+          <button className="cm-btn cm-btn-ghost" onClick={() => setAnchor(new Date())}>Today</button>
+          <button className="cm-btn cm-btn-ghost px-2.5" onClick={() => shift(1)} aria-label="Next month"><ChevronRight size={16} /></button>
+        </div>
+      </div>
+      <div className="text-xs t-faint">Each ring's fill is the share of active habits marked Done or Partial that day.</div>
+      <div>
+        <div className="grid grid-cols-7 gap-1.5 mb-1.5">
+          {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
+            <div key={d} className="text-xs t-faint text-center font-semibold">{d}</div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 gap-1.5">
+          {cells.map((d) => {
+            const dateStr = iso(d);
+            const isToday = dateStr === today;
+            const dim = d.getMonth() !== anchor.getMonth();
+            const { pctVal, neutral } = dayStats[dateStr];
+            return (
+              <div
+                key={dateStr}
+                className="rounded-xl flex items-center justify-center p-1.5 transition-all"
+                style={{
+                  minHeight: 56,
+                  background: "var(--inset)",
+                  border: `1px solid ${isToday ? "var(--brand-2)" : "var(--border)"}`,
+                  boxShadow: isToday ? "0 0 0 3px rgba(112,145,230,.16)" : undefined,
+                  opacity: dim ? 0.35 : neutral ? 0.4 : 1,
+                }}
+              >
+                <Ring value={pctVal} size={34} stroke={4}>
+                  <span className="text-[10px] font-bold t-text">{d.getDate()}</span>
+                </Ring>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
