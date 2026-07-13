@@ -296,6 +296,94 @@ export function useAppData(user: User) {
   );
   const habitChainTotal = activeHabits.length;
 
+  /** Compact habit analytics — reuses the same "scheduled + credited" fill rule as the
+   *  month/year calendar views, just aggregated over date ranges instead of rendered
+   *  per day. "Combined" streaks track days where every active, scheduled habit was
+   *  done (a "perfect day"), not any single habit. Week/month/year rates are calendar
+   *  period-to-date (e.g. "this month" = the 1st through today), matching how the
+   *  month/year views already frame those periods. Best/worst are all-time completion%
+   *  among active habits with at least one scheduled day. */
+  const habitAnalytics = useMemo(() => {
+    const creditByHabit: Record<string, Set<string>> = {};
+    habitCompletions.forEach((c) => {
+      if (c.status !== "Completed" && c.status !== "Partial") return;
+      (creditByHabit[c.habitId] ??= new Set()).add(c.date);
+    });
+
+    const perHabit = activeHabits.map((h) => {
+      const days = creditByHabit[h.id] ?? new Set<string>();
+      const current = computeHabitStreak(h.startDate, habitCompletionsByHabit[h.id] ?? [], today);
+      let longest = 0, run = 0, prevDay: string | null = null;
+      [...days].sort().forEach((day) => {
+        run = prevDay && addDays(prevDay, 1) === day ? run + 1 : 1;
+        longest = Math.max(longest, run);
+        prevDay = day;
+      });
+      let scheduled = 0, done = 0;
+      for (let d = h.startDate; d <= today; d = addDays(d, 1)) {
+        scheduled += 1;
+        if (days.has(d)) done += 1;
+      }
+      return { habit: h, current, longest, pct: pct(done, scheduled), scheduled };
+    });
+
+    const ranked = perHabit.filter((p) => p.scheduled > 0);
+    const best = ranked.length ? ranked.reduce((a, b) => (b.pct > a.pct ? b : a)) : null;
+    const worst = ranked.length ? ranked.reduce((a, b) => (b.pct < a.pct ? b : a)) : null;
+
+    /** true = every active habit scheduled that day was Completed/Partial; null = no
+     *  active habit was scheduled that day at all (doesn't count either way). */
+    const isPerfectDay = (dateStr: string): boolean | null => {
+      const scheduled = activeHabits.filter((h) => h.startDate <= dateStr);
+      if (scheduled.length === 0) return null;
+      return scheduled.every((h) => creditByHabit[h.id]?.has(dateStr));
+    };
+    let combinedCurrentStreak = 0;
+    {
+      let d = today;
+      if (isPerfectDay(d) !== true) d = addDays(d, -1);
+      while (isPerfectDay(d) === true) { combinedCurrentStreak += 1; d = addDays(d, -1); }
+    }
+    let combinedLongestStreak = 0;
+    if (activeHabits.length > 0) {
+      const earliestStart = activeHabits.reduce((min, h) => (h.startDate < min ? h.startDate : min), today);
+      let run = 0;
+      for (let d = earliestStart; d <= today; d = addDays(d, 1)) {
+        run = isPerfectDay(d) === true ? run + 1 : 0;
+        combinedLongestStreak = Math.max(combinedLongestStreak, run);
+      }
+    }
+
+    const periodPct = (periodStart: string) => {
+      let scheduled = 0, done = 0;
+      activeHabits.forEach((h) => {
+        const from = periodStart < h.startDate ? h.startDate : periodStart;
+        for (let d = from; d <= today; d = addDays(d, 1)) {
+          scheduled += 1;
+          if (creditByHabit[h.id]?.has(d)) done += 1;
+        }
+      });
+      return pct(done, scheduled);
+    };
+    const weekStart = addDays(today, -((parseISO(today).getDay() + 6) % 7)); // Monday of this week
+    const monthStart = `${today.slice(0, 7)}-01`;
+    const yearStart = `${today.slice(0, 4)}-01-01`;
+
+    return {
+      totalHabits: habits.length,
+      activeHabitsCount: activeHabits.length,
+      totalDaysLogged: habitCompletions.length,
+      combinedCurrentStreak,
+      combinedLongestStreak,
+      weekPct: periodPct(weekStart),
+      monthPct: periodPct(monthStart),
+      yearPct: periodPct(yearStart),
+      best,
+      worst,
+      perHabit,
+    };
+  }, [habits, activeHabits, habitCompletions, habitCompletionsByHabit, today]);
+
   /* ---------- derived: analytics ---------- */
   const analytics = useMemo(() => {
     const open = tasks.filter((x) => x.status !== "Archived");
@@ -814,7 +902,7 @@ export function useAppData(user: User) {
   return {
     booted, loadError, user,
     tasks, projects, goals, categories, categoriesById, projectsById, goalsById,
-    habits, habitCompletions, activeHabits, todayHabitEntries, habitStreaks, habitChainDone, habitChainTotal,
+    habits, habitCompletions, activeHabits, todayHabitEntries, habitStreaks, habitChainDone, habitChainTotal, habitAnalytics,
     settings, patchSettings, setTheme, setWidgets, setNotifPrefs,
     needsArchivePrompt, archiveYear, dismissArchivePrompt,
     toasts, burst, pushToast, fireConfetti,

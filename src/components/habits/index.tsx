@@ -1,9 +1,9 @@
 /* ── Commit · habit components ──────────────────────────────────────── */
 import React, { useEffect, useMemo, useState } from "react";
-import { Check, ChevronLeft, ChevronRight, CircleDot, Flame, MessageSquare, Pencil, Trash2, X } from "lucide-react";
+import { CalendarCheck, Check, ChevronLeft, ChevronRight, CircleDot, Flame, MessageSquare, Pencil, Repeat, Trash2, Trophy, X } from "lucide-react";
 import type { Habit, HabitFrequencyType, HabitStatus } from "@/types";
 import type { AppData } from "@/hooks/useAppData";
-import { Dot, Field, Modal, Ring } from "@/components/ui";
+import { Dot, Field, Modal, Ring, Stat } from "@/components/ui";
 import { DIFFICULTIES, HABIT_FREQUENCIES, MEASUREMENT_UNITS, DEFAULT_STREAK_MULTIPLIERS, SWATCHES, uid } from "@/utils/constants";
 import { iso, monthGridDays, parseISO, pct, shortDate, todayISO, yearGridWeeks } from "@/utils/date";
 import type { Difficulty } from "@/types";
@@ -536,5 +536,83 @@ export function HabitModal({ app }: { app: AppData }) {
         )}
       </div>
     </Modal>
+  );
+}
+
+/* ---------- Analytics — a few glanceable numbers, not a dashboard ----------
+   Presentation only: every number here comes pre-computed from app.habitAnalytics
+   (see useAppData.ts), which reuses the same "scheduled + credited" fill rule as
+   the month/year calendar views. */
+export function HabitAnalytics({ app }: { app: AppData }) {
+  const { habits, habitAnalytics: a } = app;
+  if (habits.length === 0) return null;
+
+  return (
+    <div className="cm-card p-5 flex flex-col gap-4">
+      <div>
+        <div className="text-xs font-semibold uppercase tracking-wide t-faint">Analytics</div>
+        <div className="cm-display text-lg font-bold t-text mt-0.5">At a glance</div>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Stat icon={<Repeat size={17} />} label="Habits tracked" value={a.totalHabits} sub={`${a.activeHabitsCount} active`} />
+        <Stat icon={<CalendarCheck size={17} />} label="Days logged" value={a.totalDaysLogged} />
+        <Stat icon={<Flame size={17} />} label="Combined streak" value={`${a.combinedCurrentStreak}d`} sub="all habits, same day" />
+        <Stat icon={<Trophy size={17} />} label="Best combined streak" value={`${a.combinedLongestStreak}d`} />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="cm-card p-4">
+          <div className="text-xs t-muted mb-1">This week</div>
+          <div className="cm-display text-xl font-bold t-text">{a.weekPct}%</div>
+        </div>
+        <div className="cm-card p-4">
+          <div className="text-xs t-muted mb-1">This month</div>
+          <div className="cm-display text-xl font-bold t-text">{a.monthPct}%</div>
+        </div>
+        <div className="cm-card p-4">
+          <div className="text-xs t-muted mb-1">This year</div>
+          <div className="cm-display text-xl font-bold t-text">{a.yearPct}%</div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="cm-card p-4">
+          <div className="text-xs t-muted mb-1.5">Best performing habit</div>
+          {a.best ? (
+            <div className="flex items-center justify-between gap-2">
+              <span className="inline-flex items-center gap-2 text-sm font-semibold t-text truncate"><Dot color={a.best.habit.color} /> {a.best.habit.name}</span>
+              <span className="cm-display text-lg font-bold t-text shrink-0">{a.best.pct}%</span>
+            </div>
+          ) : <div className="text-sm t-faint">Not enough data yet</div>}
+        </div>
+        <div className="cm-card p-4">
+          <div className="text-xs t-muted mb-1.5">Worst performing habit</div>
+          {a.worst ? (
+            <div className="flex items-center justify-between gap-2">
+              <span className="inline-flex items-center gap-2 text-sm font-semibold t-text truncate"><Dot color={a.worst.habit.color} /> {a.worst.habit.name}</span>
+              <span className="cm-display text-lg font-bold t-text shrink-0">{a.worst.pct}%</span>
+            </div>
+          ) : <div className="text-sm t-faint">Not enough data yet</div>}
+        </div>
+      </div>
+
+      {a.perHabit.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <div className="text-xs font-semibold uppercase tracking-wide t-faint">Streaks by habit</div>
+          <div className="flex flex-col gap-1.5">
+            {a.perHabit.map((p) => (
+              <div key={p.habit.id} className="flex items-center justify-between gap-2 text-sm cm-inset px-3 py-2 rounded-lg">
+                <span className="inline-flex items-center gap-2 font-medium t-text truncate"><Dot color={p.habit.color} /> {p.habit.name}</span>
+                <span className="flex items-center gap-3 text-xs t-muted shrink-0">
+                  <span className="inline-flex items-center gap-1"><Flame size={12} className={p.current > 0 ? "cm-flame t-brand" : ""} /> {p.current}d current</span>
+                  <span className="inline-flex items-center gap-1"><Trophy size={12} /> {p.longest}d best</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

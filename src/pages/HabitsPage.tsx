@@ -2,7 +2,7 @@
 import React from "react";
 import { Flame, Plus, Repeat } from "lucide-react";
 import type { AppData } from "@/hooks/useAppData";
-import { HabitMonthGrid, HabitRow } from "@/components/habits";
+import { HabitAnalytics, HabitMonthGrid, HabitRow } from "@/components/habits";
 import { EmptyState, Ring } from "@/components/ui";
 import { pct } from "@/utils/date";
 
@@ -38,6 +38,8 @@ export function HabitsPage({ app }: { app: AppData }) {
       </div>
 
       {habits.length > 0 && <HabitMonthGrid app={app} />}
+
+      {habits.length > 0 && <HabitAnalytics app={app} />}
 
       {habits.length === 0 && (
         <EmptyState
