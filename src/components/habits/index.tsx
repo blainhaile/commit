@@ -5,14 +5,17 @@ import type { Habit, HabitFrequencyType, HabitStatus } from "@/types";
 import type { AppData } from "@/hooks/useAppData";
 import { Dot, Field, Modal, Ring } from "@/components/ui";
 import { DIFFICULTIES, HABIT_FREQUENCIES, MEASUREMENT_UNITS, DEFAULT_STREAK_MULTIPLIERS, uid } from "@/utils/constants";
-import { iso, monthGridDays, pct, todayISO } from "@/utils/date";
+import { iso, monthGridDays, parseISO, pct, shortDate, todayISO } from "@/utils/date";
 import type { Difficulty } from "@/types";
 
-/* ---------- Habit row (today's mark-off card) ---------- */
-export function HabitRow({ habit, app }: { habit: Habit; app: AppData }) {
-  const { categoriesById, todayHabitEntries, habitStreaks, logHabitCompletion, openEditHabit } = app;
+/* ---------- Habit row (mark-off card, defaults to today; pass `date` to
+   retroactively mark a past day — same UI, just targets a different date). ---------- */
+export function HabitRow({ habit, app, date }: { habit: Habit; app: AppData; date?: string }) {
+  const { categoriesById, todayHabitEntries, habitCompletions, habitStreaks, logHabitCompletion, openEditHabit } = app;
+  const targetDate = date ?? todayISO();
+  const isToday = targetDate === todayISO();
   const cat = habit.categoryId ? categoriesById[habit.categoryId] : null;
-  const entry = todayHabitEntries[habit.id];
+  const entry = isToday ? todayHabitEntries[habit.id] : habitCompletions.find((c) => c.habitId === habit.id && c.date === targetDate);
   const streak = habitStreaks[habit.id] ?? 0;
 
   const [amount, setAmount] = useState<number | "">(entry?.amount ?? habit.goalAmount);
@@ -22,12 +25,12 @@ export function HabitRow({ habit, app }: { habit: Habit; app: AppData }) {
   const mark = (status: HabitStatus) => {
     const amt = status === "Missed" ? 0 : Number(amount) || 0;
     if (status === "Missed") setAmount(0);
-    logHabitCompletion(habit.id, status, amt, notes);
+    logHabitCompletion(habit.id, status, amt, notes, targetDate);
   };
 
   const saveNotes = () => {
     if (!entry) return;
-    logHabitCompletion(habit.id, entry.status, entry.amount, notes);
+    logHabitCompletion(habit.id, entry.status, entry.amount, notes, targetDate);
   };
 
   return (
@@ -100,7 +103,7 @@ export function HabitRow({ habit, app }: { habit: Habit; app: AppData }) {
 
       {entry && (
         <div className="text-xs t-faint">
-          +{entry.xpEarned} XP earned today
+          +{entry.xpEarned} XP earned {isToday ? "today" : `on ${shortDate(targetDate)}`}
         </div>
       )}
     </div>
@@ -116,6 +119,7 @@ export function HabitRow({ habit, app }: { habit: Habit; app: AppData }) {
 export function HabitMonthGrid({ app }: { app: AppData }) {
   const { activeHabits, habitCompletions } = app;
   const [anchor, setAnchor] = useState(() => new Date());
+  const [openDate, setOpenDate] = useState<string | null>(null);
   const today = todayISO();
 
   const creditDatesByHabit = useMemo(() => {
@@ -175,10 +179,16 @@ export function HabitMonthGrid({ app }: { app: AppData }) {
             const isToday = dateStr === today;
             const dim = d.getMonth() !== anchor.getMonth();
             const { pctVal, neutral } = dayStats[dateStr];
+            const clickable = !neutral; // strictly-past days with habits scheduled that day
             return (
               <div
                 key={dateStr}
-                className="rounded-xl flex items-center justify-center p-1.5 transition-all"
+                role={clickable ? "button" : undefined}
+                tabIndex={clickable ? 0 : undefined}
+                onClick={clickable ? () => setOpenDate(dateStr) : undefined}
+                onKeyDown={clickable ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpenDate(dateStr); } } : undefined}
+                aria-label={clickable ? `Edit habits for ${shortDate(dateStr)}` : undefined}
+                className={`rounded-xl flex items-center justify-center p-1.5 transition-all ${clickable ? "cursor-pointer hover:brightness-110" : ""}`}
                 style={{
                   minHeight: 56,
                   background: "var(--inset)",
@@ -195,7 +205,26 @@ export function HabitMonthGrid({ app }: { app: AppData }) {
           })}
         </div>
       </div>
+      {openDate && <HabitDayModal app={app} date={openDate} onClose={() => setOpenDate(null)} />}
     </div>
+  );
+}
+
+/* ---------- Retroactive day editor (opened from the month grid) ----------
+   Reuses HabitRow verbatim for each habit that had started by `date`, just
+   pointed at that date instead of today — same chips, same amount/notes UI. */
+function HabitDayModal({ app, date, onClose }: { app: AppData; date: string; onClose: () => void }) {
+  const dayHabits = app.activeHabits.filter((h) => h.startDate <= date);
+  const label = parseISO(date).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+  return (
+    <Modal title={label} onClose={onClose}>
+      <div className="flex flex-col gap-3">
+        {dayHabits.map((h) => <HabitRow key={h.id} habit={h} app={app} date={date} />)}
+        {dayHabits.length === 0 && (
+          <div className="text-sm t-muted">No active habits had started yet by this day.</div>
+        )}
+      </div>
+    </Modal>
   );
 }
 

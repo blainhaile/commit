@@ -716,25 +716,26 @@ export function useAppData(user: User) {
     setEditorHabit(null);
   }, []);
 
-  /** Logs (or overwrites) today's completion for a habit. XP scales with amount/goal,
-   *  capped at the base xpReward; streak multipliers are stored but not applied yet. */
-  const logHabitCompletion = useCallback((habitId: string, status: HabitStatus, amount: number, notes: string) => {
+  /** Logs (or overwrites) a habit's completion for `date` (defaults to today, so every
+   *  existing "mark today" call site is unaffected). XP scales with amount/goal, capped
+   *  at the base xpReward; streak multipliers are stored but not applied yet. */
+  const logHabitCompletion = useCallback((habitId: string, status: HabitStatus, amount: number, notes: string, date: string = today) => {
     const habit = habits.find((h) => h.id === habitId);
     if (!habit) return;
-    const existing = todayHabitEntries[habitId];
+    const existing = habitCompletionsByHabit[habitId]?.find((c) => c.date === date);
     const xpEarned = status === "Missed"
       ? 0
       : Math.round(habit.xpReward * Math.min(1, habit.goalAmount > 0 ? amount / habit.goalAmount : 1));
     const saved: HabitCompletion = {
       id: existing?.id ?? uid("hc"),
       habitId,
-      date: today,
+      date,
       status,
       amount,
       notes,
       xpEarned,
       createdAt: existing?.createdAt ?? nowStamp(),
-      year: parseISO(today).getFullYear(),
+      year: parseISO(date).getFullYear(),
     };
     setHabitCompletions((prev) => {
       const exists = prev.some((x) => x.id === saved.id);
@@ -742,9 +743,13 @@ export function useAppData(user: User) {
     });
     db.upsertHabitCompletion(saved, userId);
     if (status === "Completed") {
-      pushToast({ kind: "xp", title: `+${xpEarned} XP — ${habit.name}`, sub: "Habit logged for today" });
+      pushToast({
+        kind: "xp",
+        title: `+${xpEarned} XP — ${habit.name}`,
+        sub: date === today ? "Habit logged for today" : `Habit logged for ${shortDate(date)}`,
+      });
     }
-  }, [habits, todayHabitEntries, today, userId, pushToast]);
+  }, [habits, habitCompletionsByHabit, today, userId, pushToast]);
 
   const loadSample = useCallback(async () => {
     setCategories(seedCategories);
