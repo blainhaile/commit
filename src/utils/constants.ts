@@ -67,5 +67,14 @@ export const HABIT_STATUS_COLOR: Record<HabitStatus, string> = {
   Missed: "#C0455E",
 };
 
+/* Streak celebration thresholds — crossing one fires the same toast/confetti
+   system as task-level-up and goal-complete celebrations. */
+export const STREAK_MILESTONES = [7, 30, 100];
+export const STREAK_MILESTONE_COPY: Record<number, string> = {
+  7: "One week strong. Keep it up.",
+  30: "A full month of showing up.",
+  100: "Triple digits. That's mastery.",
+};
+
 let _uid = 0;
 export const uid = (p = "id") => `${p}_${Date.now().toString(36)}_${(++_uid).toString(36)}`;

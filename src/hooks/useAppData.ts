@@ -13,10 +13,25 @@ import {
   addDays, daysAgo, daysAhead, nowStamp, parseISO, pct, shortDate, todayISO, weekday, DAY_MS,
 } from "@/utils/date";
 import { levelFromXP, XP_BY_DIFFICULTY } from "@/utils/xp";
-import { PRIORITY_RANK, uid } from "@/utils/constants";
+import { PRIORITY_RANK, STREAK_MILESTONES, STREAK_MILESTONE_COPY, uid } from "@/utils/constants";
 
 export type ToastKind = "xp" | "level" | "goal" | "date" | "info";
 export interface AppToast extends Toast { kind: ToastKind }
+
+/** Consecutive days (Completed or Partial) counting back from `today`; today itself
+ *  doesn't break the streak until it ends, mirroring the task streak's grace period.
+ *  Pure and side-effect-free so it can also be used to compare a streak before/after
+ *  a single edit, for milestone-celebration detection. */
+function computeHabitStreak(startDate: string, completions: HabitCompletion[], today: string): number {
+  const days = new Set(
+    completions.filter((c) => c.status === "Completed" || c.status === "Partial").map((c) => c.date),
+  );
+  let cur = 0;
+  let d = today;
+  if (!days.has(d)) d = addDays(d, -1);
+  while (days.has(d) && d >= startDate) { cur += 1; d = addDays(d, -1); }
+  return cur;
+}
 
 const DEFAULT_SETTINGS: Settings = {
   theme: "light",
@@ -269,22 +284,9 @@ export function useAppData(user: User) {
     [habitCompletions, today],
   ) as Record<string, HabitCompletion>;
 
-  /** Consecutive days (Completed or Partial) counting back from today; today itself
-   *  doesn't break the streak until it ends, mirroring the task streak's grace period. */
   const habitStreaks = useMemo(() => {
     const out: Record<string, number> = {};
-    habits.forEach((h) => {
-      const days = new Set(
-        (habitCompletionsByHabit[h.id] ?? [])
-          .filter((c) => c.status === "Completed" || c.status === "Partial")
-          .map((c) => c.date),
-      );
-      let cur = 0;
-      let d = today;
-      if (!days.has(d)) d = addDays(d, -1);
-      while (days.has(d) && d >= h.startDate) { cur += 1; d = addDays(d, -1); }
-      out[h.id] = cur;
-    });
+    habits.forEach((h) => { out[h.id] = computeHabitStreak(h.startDate, habitCompletionsByHabit[h.id] ?? [], today); });
     return out;
   }, [habits, habitCompletionsByHabit, today]);
 
@@ -722,7 +724,8 @@ export function useAppData(user: User) {
   const logHabitCompletion = useCallback((habitId: string, status: HabitStatus, amount: number, notes: string, date: string = today) => {
     const habit = habits.find((h) => h.id === habitId);
     if (!habit) return;
-    const existing = habitCompletionsByHabit[habitId]?.find((c) => c.date === date);
+    const habitEntries = habitCompletionsByHabit[habitId] ?? [];
+    const existing = habitEntries.find((c) => c.date === date);
     const xpEarned = status === "Missed"
       ? 0
       : Math.round(habit.xpReward * Math.min(1, habit.goalAmount > 0 ? amount / habit.goalAmount : 1));
@@ -737,6 +740,18 @@ export function useAppData(user: User) {
       createdAt: existing?.createdAt ?? nowStamp(),
       year: parseISO(date).getFullYear(),
     };
+
+    /* Streak-milestone celebration: compare the streak this exact edit produces against
+     * the streak right before it, so a threshold only fires the moment it's newly
+     * crossed by this action — never on app load, and never again once already past it
+     * (a habit already at streak 10 has beforeStreak=10, so 10 < 7 is false and the
+     * 7-day toast can't re-fire). If a streak fully resets and is later rebuilt past a
+     * threshold again, it re-celebrates — intentional, no permanent "already earned" flag. */
+    const beforeStreak = computeHabitStreak(habit.startDate, habitEntries, today);
+    const afterEntries = existing ? habitEntries.map((c) => (c.id === saved.id ? saved : c)) : [...habitEntries, saved];
+    const afterStreak = computeHabitStreak(habit.startDate, afterEntries, today);
+    const newlyHitMilestones = STREAK_MILESTONES.filter((m) => beforeStreak < m && afterStreak >= m);
+
     setHabitCompletions((prev) => {
       const exists = prev.some((x) => x.id === saved.id);
       return exists ? prev.map((x) => (x.id === saved.id ? saved : x)) : [...prev, saved];
@@ -749,7 +764,17 @@ export function useAppData(user: User) {
         sub: date === today ? "Habit logged for today" : `Habit logged for ${shortDate(date)}`,
       });
     }
-  }, [habits, habitCompletionsByHabit, today, userId, pushToast]);
+    if (newlyHitMilestones.length > 0) {
+      fireConfetti();
+      newlyHitMilestones.forEach((m, i) => {
+        window.setTimeout(() => pushToast({
+          kind: "level",
+          title: `${m}-day streak — ${habit.name}`,
+          sub: STREAK_MILESTONE_COPY[m],
+        }), 350 + i * 300);
+      });
+    }
+  }, [habits, habitCompletionsByHabit, today, userId, pushToast, fireConfetti]);
 
   const loadSample = useCallback(async () => {
     setCategories(seedCategories);
