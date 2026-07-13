@@ -1,11 +1,11 @@
 /* ── Commit · habit components ──────────────────────────────────────── */
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, CircleDot, Flame, MessageSquare, Pencil, Trash2, X } from "lucide-react";
 import type { Habit, HabitFrequencyType, HabitStatus } from "@/types";
 import type { AppData } from "@/hooks/useAppData";
 import { Dot, Field, Modal, Ring } from "@/components/ui";
 import { DIFFICULTIES, HABIT_FREQUENCIES, MEASUREMENT_UNITS, DEFAULT_STREAK_MULTIPLIERS, SWATCHES, uid } from "@/utils/constants";
-import { iso, monthGridDays, parseISO, pct, shortDate, todayISO } from "@/utils/date";
+import { iso, monthGridDays, parseISO, pct, shortDate, todayISO, yearGridWeeks } from "@/utils/date";
 import type { Difficulty } from "@/types";
 
 /* ---------- Habit row (mark-off card, defaults to today; pass `date` to
@@ -119,7 +119,8 @@ export function HabitRow({ habit, app, date }: { habit: Habit; app: AppData; dat
    habits scheduled yet render as a dimmed, empty ring ("no data") rather
    than a full-strength empty ring (which would misleadingly read as 0%). */
 export function HabitMonthGrid({ app }: { app: AppData }) {
-  const { activeHabits, habitCompletions } = app;
+  const { habits, activeHabits, habitCompletions } = app;
+  const [view, setView] = useState<"Month" | "Year">("Month");
   const [anchor, setAnchor] = useState(() => new Date());
   const [openDate, setOpenDate] = useState<string | null>(null);
   const today = todayISO();
@@ -159,15 +160,35 @@ export function HabitMonthGrid({ app }: { app: AppData }) {
     <div className="cm-card p-5 flex flex-col gap-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <div className="text-xs font-semibold uppercase tracking-wide t-faint">Monthly view</div>
-          <div className="cm-display text-lg font-bold t-text mt-0.5">{monthLabel}</div>
+          <div className="text-xs font-semibold uppercase tracking-wide t-faint">{view === "Month" ? "Monthly view" : "Yearly view"}</div>
+          <div className="cm-display text-lg font-bold t-text mt-0.5">{view === "Month" ? monthLabel : " "}</div>
         </div>
-        <div className="flex items-center gap-2">
-          <button className="cm-btn cm-btn-ghost px-2.5" onClick={() => shift(-1)} aria-label="Previous month"><ChevronLeft size={16} /></button>
-          <button className="cm-btn cm-btn-ghost" onClick={() => setAnchor(new Date())}>Today</button>
-          <button className="cm-btn cm-btn-ghost px-2.5" onClick={() => shift(1)} aria-label="Next month"><ChevronRight size={16} /></button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="cm-card flex gap-1 p-1" style={{ borderRadius: 12 }}>
+            {(["Month", "Year"] as const).map((v) => (
+              <button
+                key={v}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                style={view === v
+                  ? { background: "linear-gradient(150deg,#5b74c8,#3d52a0)", color: "#fff", boxShadow: "inset 0 1px 0 rgba(255,255,255,.3)" }
+                  : { color: "var(--muted)" }}
+                onClick={() => setView(v)}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
+          {view === "Month" && (
+            <>
+              <button className="cm-btn cm-btn-ghost px-2.5" onClick={() => shift(-1)} aria-label="Previous month"><ChevronLeft size={16} /></button>
+              <button className="cm-btn cm-btn-ghost" onClick={() => setAnchor(new Date())}>Today</button>
+              <button className="cm-btn cm-btn-ghost px-2.5" onClick={() => shift(1)} aria-label="Next month"><ChevronRight size={16} /></button>
+            </>
+          )}
         </div>
       </div>
+      {view === "Year" && <HabitYearGrid app={app} onOpenDay={setOpenDate} />}
+      {view === "Month" && <>
       <div className="text-xs t-faint">Each ring's fill is the share of active habits marked Done or Partial that day — the dots below show which ones.</div>
       <div>
         <div className="grid grid-cols-7 gap-1.5 mb-1.5">
@@ -220,7 +241,142 @@ export function HabitMonthGrid({ app }: { app: AppData }) {
           })}
         </div>
       </div>
+      </>}
       {openDate && <HabitDayModal app={app} date={openDate} onClose={() => setOpenDate(null)} />}
+    </div>
+  );
+}
+
+/* ---------- Yearly completion heatmap (GitHub-contribution-graph style) ----------
+   One habit at a time, picked via colored pills. Reuses the exact same fill rule as
+   the month grid — Completed/Partial credit, gated by habit.startDate — just for a
+   single habit instead of an aggregate fraction, so each day is done/not-done rather
+   than a percentage. Completed renders at full habit-color intensity, Partial at a
+   muted/lighter shade of the same color, so the two are visually distinguishable. */
+function HabitYearGrid({ app, onOpenDay }: { app: AppData; onOpenDay: (date: string) => void }) {
+  const { habits, habitCompletions } = app;
+  const [habitId, setHabitId] = useState<string | null>(habits[0]?.id ?? null);
+  const [year, setYear] = useState(() => new Date().getFullYear());
+  const today = todayISO();
+
+  useEffect(() => {
+    if ((!habitId || !habits.some((h) => h.id === habitId)) && habits.length > 0) setHabitId(habits[0].id);
+  }, [habits, habitId]);
+
+  const habit = habits.find((h) => h.id === habitId) ?? null;
+
+  const statusByDate = useMemo(() => {
+    const out: Record<string, HabitStatus> = {};
+    habitCompletions.forEach((c) => { if (c.habitId === habitId) out[c.date] = c.status; });
+    return out;
+  }, [habitCompletions, habitId]);
+
+  const weeks = useMemo(() => yearGridWeeks(year), [year]);
+
+  const monthLabels = useMemo(() => {
+    let lastMonth = -1;
+    return weeks.map((week) => {
+      const d = week[0];
+      if (d.getFullYear() === year && d.getMonth() !== lastMonth) {
+        lastMonth = d.getMonth();
+        return d.toLocaleDateString(undefined, { month: "short" });
+      }
+      return "";
+    });
+  }, [weeks, year]);
+
+  const summary = useMemo(() => {
+    if (!habit) return { done: 0, scheduled: 0 };
+    let done = 0, scheduled = 0;
+    weeks.forEach((week) => week.forEach((d) => {
+      if (d.getFullYear() !== year) return;
+      const dateStr = iso(d);
+      if (dateStr > today || dateStr < habit.startDate) return;
+      scheduled += 1;
+      const s = statusByDate[dateStr];
+      if (s === "Completed" || s === "Partial") done += 1;
+    }));
+    return { done, scheduled };
+  }, [weeks, year, habit, statusByDate, today]);
+
+  if (habits.length === 0 || !habit) return null;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-2 flex-wrap">
+        {habits.map((h) => (
+          <button
+            key={h.id}
+            className="text-xs font-semibold px-2.5 py-1 rounded-full transition-all"
+            style={habitId === h.id
+              ? { background: h.color, color: "#fff", boxShadow: "inset 0 1px 0 rgba(255,255,255,.3)" }
+              : { background: `${h.color}18`, color: h.color, border: `1px solid ${h.color}40` }}
+            onClick={() => setHabitId(h.id)}
+          >
+            {h.name}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="text-xs t-faint">
+          {summary.done} of {summary.scheduled} scheduled days completed in {year} — full color is Completed, lighter is Partial.
+        </div>
+        <div className="flex items-center gap-2">
+          <button className="cm-btn cm-btn-ghost px-2.5" onClick={() => setYear((y) => y - 1)} aria-label="Previous year"><ChevronLeft size={16} /></button>
+          <button className="cm-btn cm-btn-ghost" onClick={() => setYear(new Date().getFullYear())}>This year</button>
+          <button className="cm-btn cm-btn-ghost px-2.5" onClick={() => setYear((y) => y + 1)} aria-label="Next year"><ChevronRight size={16} /></button>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto cm-scroll">
+        <div className="inline-flex gap-1" style={{ paddingBottom: 4 }}>
+          <div className="flex flex-col gap-[3px]" style={{ marginTop: 16 }}>
+            {["Mon", "", "Wed", "", "Fri", "", ""].map((label, i) => (
+              <div key={i} className="text-[9px] t-faint" style={{ height: 11, lineHeight: "11px" }}>{label}</div>
+            ))}
+          </div>
+          {weeks.map((week, wi) => (
+            <div key={wi} className="flex flex-col gap-[3px]">
+              <div className="text-[9px] t-faint whitespace-nowrap" style={{ height: 12, lineHeight: "12px" }}>{monthLabels[wi]}</div>
+              {week.map((d) => {
+                const dateStr = iso(d);
+                if (d.getFullYear() !== year) {
+                  return <div key={dateStr} style={{ width: 11, height: 11 }} />;
+                }
+                const isToday = dateStr === today;
+                const neutral = dateStr > today || dateStr < habit.startDate;
+                const status = statusByDate[dateStr];
+                const clickable = !neutral;
+                let background = "var(--inset)";
+                let border = "var(--border)";
+                if (!neutral) {
+                  if (status === "Completed") { background = habit.color; border = habit.color; }
+                  else if (status === "Partial") { background = `${habit.color}4D`; border = `${habit.color}66`; }
+                }
+                return (
+                  <div
+                    key={dateStr}
+                    role={clickable ? "button" : undefined}
+                    tabIndex={clickable ? 0 : undefined}
+                    onClick={clickable ? () => onOpenDay(dateStr) : undefined}
+                    onKeyDown={clickable ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenDay(dateStr); } } : undefined}
+                    aria-label={clickable ? `Edit habits for ${shortDate(dateStr)}` : undefined}
+                    title={`${shortDate(dateStr)}${status ? ` — ${status}` : neutral ? "" : " — no entry"}`}
+                    className={`rounded-[3px] transition-all ${clickable ? "cursor-pointer hover:brightness-110" : ""}`}
+                    style={{
+                      width: 11, height: 11,
+                      background, border: `1px solid ${border}`,
+                      boxShadow: isToday ? "0 0 0 1.5px var(--brand-2)" : undefined,
+                      opacity: neutral ? 0.35 : 1,
+                    }}
+                  />
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

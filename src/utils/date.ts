@@ -44,6 +44,27 @@ export function monthGridDays(anchor: Date): Date[] {
   });
 }
 
+/** The Monday-start week columns spanning Jan 1–Dec 31 of `year`, padded to whole
+ *  weeks on both ends — a GitHub-style contribution-heatmap layout, one column per
+ *  week, 7 rows per column. Days outside `year` (the padding at each end) are still
+ *  present so every column has 7 entries; callers should skip rendering those. */
+export function yearGridWeeks(year: number): Date[][] {
+  const first = new Date(year, 0, 1);
+  const last = new Date(year, 11, 31);
+  const startOffset = (first.getDay() + 6) % 7; // Monday start
+  const endOffset = 6 - ((last.getDay() + 6) % 7);
+  const start = new Date(year, 0, 1 - startOffset);
+  const end = new Date(year, 11, 31 + endOffset);
+  const totalDays = Math.round((end.getTime() - start.getTime()) / DAY_MS) + 1;
+  return Array.from({ length: totalDays / 7 }, (_, w) =>
+    Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(start);
+      d.setDate(start.getDate() + w * 7 + i);
+      return d;
+    }),
+  );
+}
+
 /** "14:30" -> "2:30 PM" */
 export function formatTime(hhmm: string): string {
   const [h, m] = hhmm.split(":").map(Number);
